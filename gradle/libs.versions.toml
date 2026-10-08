@@ -1,0 +1,10 @@
+[versions]
+jvm = "27"
+jvm-target = "17"
+
+kotest = "6.2.5"
+testResources = "0.16.2"
+
+[libraries]
+kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+testResources = { module = "com.goncalossilva:resources", version.ref = "testResources" }

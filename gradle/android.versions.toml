@@ -1,0 +1,11 @@
+[versions]
+agp = "9.3.3"
+
+jvm = "17"
+compileSdk = "37"
+minSdk = "24"
+targetSdk = "37"
+
+[plugins]
+application = { id = "com.android.application", version.ref = "agp" }
+library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

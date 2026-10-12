@@ -1,6 +1,8 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 import io.ktor.resources.Resource
 import io.ktor.resources.serialization.ResourcesFormat
 import kotlinx.serialization.serializer
@@ -11,12 +13,14 @@ import kotlinx.serialization.serializer
  *
  * @param pathOf maps a stack entry to its URL location (Ktor [io.ktor.http.Url.fullPath], path + query)
  * @param parsePath maps a URL location to a stack entry
+ * @param applyEntry applies [parsePath] results to the navigation stack (default: [NavBackStack.syncTo])
  */
 @Composable
-expect fun <Entry : GroupNavKey<Group>, Group : Any> SyncBrowserHistory(
-    backStack: GroupBackStack<Entry, Group>,
+expect fun <Entry : NavKey> SyncBrowserHistory(
+    backStack: NavBackStack<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
+    applyEntry: (Entry) -> Unit = { backStack.syncTo(it) },
 )
 
 /**
@@ -25,20 +29,22 @@ expect fun <Entry : GroupNavKey<Group>, Group : Any> SyncBrowserHistory(
  * [Entry] must be a `@Serializable` sealed type whose navigable variants are `@Resource`-annotated
  * (same model as [Ktor type-safe routing](https://ktor.io/docs/server-resources.html)).
  *
- * Unrecognized browser locations fall back to [GroupBackStack.current], then the URL is corrected
- * to match that entry.
+ * Unrecognized browser locations fall back to the current top of [backStack], then the URL is
+ * corrected to match that entry.
  */
 @Composable
-inline fun <reified Entry : GroupNavKey<Group>, Group : Any> SyncBrowserHistory(
-    backStack: GroupBackStack<Entry, Group>,
+inline fun <reified Entry : NavKey> SyncBrowserHistory(
+    backStack: NavBackStack<Entry>,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
+    noinline applyEntry: (Entry) -> Unit = { backStack.syncTo(it) },
 ) {
     SyncBrowserHistory(
         backStack = backStack,
         pathOf = { it.toResourcePath(resourcesFormat) },
         parsePath = { location ->
             fromResourcePath(location, serializer<Entry>(), resourcesFormat)
-                ?: backStack.current
+                ?: backStack.last()
         },
+        applyEntry = applyEntry,
     )
 }

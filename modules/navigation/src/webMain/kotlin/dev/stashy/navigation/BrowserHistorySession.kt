@@ -1,14 +1,17 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.snapshotFlow
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 import kotlinx.browser.window
 import org.w3c.dom.events.Event
 
 @OptIn(ExperimentalWasmJsInterop::class)
-internal class BrowserHistorySession<Entry : GroupNavKey<Group>, Group : Any>(
-    private val backStack: GroupBackStack<Entry, Group>,
+internal class BrowserHistorySession<Entry : NavKey>(
+    private val backStack: NavBackStack<Entry>,
     private val pathOf: (Entry) -> String,
     private val parsePath: (String) -> Entry,
+    private val applyEntry: (Entry) -> Unit,
 ) {
     /** How many `pushState` entries this session owns above the initial replaceState. */
     private var navigableDepth = 0
@@ -21,12 +24,12 @@ internal class BrowserHistorySession<Entry : GroupNavKey<Group>, Group : Any>(
 
     suspend fun bind() {
         val initial = parsePath(currentLocation())
-        backStack.syncTo(initial)
+        applyEntry(initial)
         window.history.replaceState(null, "", pathOf(initial))
         navigableDepth = 0
-        lastSize = backStack.backStack.size
+        lastSize = backStack.size
 
-        snapshotFlow { backStack.backStack.toList() }
+        snapshotFlow { backStack.toList() }
             .collect { stack -> syncStackToHistory(stack) }
     }
 
@@ -68,12 +71,12 @@ internal class BrowserHistorySession<Entry : GroupNavKey<Group>, Group : Any>(
         val listener: (Event) -> Unit = {
             if (suppressPopState) {
                 suppressPopState = false
-                lastSize = backStack.backStack.size
+                lastSize = backStack.size
             } else {
                 val location = currentLocation()
-                val sizeBefore = backStack.backStack.size
-                backStack.syncTo(parsePath(location))
-                val sizeAfter = backStack.backStack.size
+                val sizeBefore = backStack.size
+                applyEntry(parsePath(location))
+                val sizeAfter = backStack.size
                 navigableDepth = (navigableDepth + (sizeAfter - sizeBefore)).coerceAtLeast(0)
                 lastSize = sizeAfter
             }

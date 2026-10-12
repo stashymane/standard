@@ -4,15 +4,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 
 @Composable
-actual fun <Entry : GroupNavKey<Group>, Group : Any> SyncBrowserHistory(
-    backStack: GroupBackStack<Entry, Group>,
+actual fun <Entry : NavKey> SyncBrowserHistory(
+    backStack: NavBackStack<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
+    applyEntry: (Entry) -> Unit,
 ) {
-    val session = remember(backStack, pathOf, parsePath) {
-        BrowserHistorySession(backStack, pathOf, parsePath)
+    val session = remember(backStack, pathOf, parsePath, applyEntry) {
+        BrowserHistorySession(backStack, pathOf, parsePath, applyEntry)
     }
 
     LaunchedEffect(session) {

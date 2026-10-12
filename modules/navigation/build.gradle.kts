@@ -33,6 +33,10 @@ kotlin {
             implementation(composeLibs.androidx.navigation3.runtime)
         }
 
+        commonTest.dependencies {
+            implementation(kotlinLibs.test)
+        }
+
         wasmJsMain.dependencies {
             implementation(kotlinLibs.browser)
         }

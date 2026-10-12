@@ -1,25 +1,17 @@
 package dev.stashy.navigation
 
-import io.ktor.http.Parameters
-import io.ktor.http.ParametersBuilder
-import io.ktor.http.URLBuilder
-import io.ktor.http.fullPath
-import io.ktor.resources.Resource
-import io.ktor.resources.href
-import io.ktor.resources.serialization.ResourcesFormat
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.InternalSerializationApi
-import kotlinx.serialization.KSerializer
+import io.ktor.http.*
+import io.ktor.resources.*
+import io.ktor.resources.serialization.*
+import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.AbstractDecoder
-import kotlinx.serialization.findPolymorphicSerializer
 import kotlinx.serialization.internal.AbstractPolymorphicSerializer
 import kotlinx.serialization.modules.EmptySerializersModule
 import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.serializer
 
-private val resourcesFormat = ResourcesFormat()
+val defaultResourcesFormat: ResourcesFormat = ResourcesFormat()
 
 @OptIn(ExperimentalSerializationApi::class)
 private object SerialNameLookup : AbstractDecoder() {
@@ -27,42 +19,52 @@ private object SerialNameLookup : AbstractDecoder() {
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int = error("unused")
 }
 
-fun normalizePath(path: String): String {
-    val trimmed = path.trimEnd('/')
-    return when {
-        trimmed.isEmpty() -> "/"
-        trimmed.startsWith('/') -> trimmed
-        else -> "/$trimmed"
-    }
-}
-
 /**
- * Builds a URL path for a Ktor [@Resource][Resource]-annotated serializable instance.
+ * Builds a resource location (Ktor [io.ktor.http.Url.fullPath]: encoded path and query)
+ * for a [@Resource][Resource]-annotated serializable instance.
  */
 @OptIn(InternalSerializationApi::class)
 @Suppress("UNCHECKED_CAST")
-fun <T : Any> T.toResourcePath(): String {
+fun <T : Any> T.toResourcePath(resourcesFormat: ResourcesFormat = defaultResourcesFormat): String {
     val serializer = this::class.serializer() as KSerializer<T>
     val builder = URLBuilder()
     href(resourcesFormat, serializer, this, builder)
-    return normalizePath(builder.build().fullPath.ifEmpty { "/" })
+    val full = builder.build().fullPath
+    return normalizeResourceLocation(full.ifEmpty { "/" })
 }
 
 /**
- * Resolves a URL path to a [@Resource][Resource]-annotated subtype of [T].
+ * Resolves a resource location to a [@Resource][Resource]-annotated subtype of [T].
  */
-inline fun <reified T : Any> fromResourcePath(path: String): T? =
-    fromResourcePath(path, serializer())
+inline fun <reified T : Any> fromResourcePath(
+    location: String,
+    resourcesFormat: ResourcesFormat = defaultResourcesFormat,
+): T? = fromResourcePath(location, serializer(), resourcesFormat)
 
-@OptIn(InternalSerializationApi::class, ExperimentalSerializationApi::class)
 @Suppress("UNCHECKED_CAST")
-fun <T : Any> fromResourcePath(path: String, rootSerializer: KSerializer<T>): T? {
-    val normalized = normalizePath(path)
+fun <T : Any> fromResourcePath(
+    location: String,
+    rootSerializer: KSerializer<T>,
+    resourcesFormat: ResourcesFormat = defaultResourcesFormat,
+): T? {
+    val (path, query) = splitResourceLocation(location)
+    val normalizedPath = normalizeResourcePath(path)
+    val queryParams = if (query.isNullOrEmpty()) Parameters.Empty else parseQueryString(query)
+
     return resourceSerializers(rootSerializer).firstNotNullOfOrNull { child ->
         val pattern = resourcesFormat.encodeToPathPattern(child)
-        val parameters = matchResourcePath(pattern, normalized) ?: return@firstNotNullOfOrNull null
+        val pathParams = matchResourcePath(pattern, normalizedPath) ?: return@firstNotNullOfOrNull null
+
+        val querySpecs = resourcesFormat.encodeToQueryParameters(child)
+        for (spec in querySpecs) {
+            if (!spec.isOptional && queryParams.getAll(spec.name).isNullOrEmpty()) {
+                return@firstNotNullOfOrNull null
+            }
+        }
+
+        val merged = mergeResourceParameters(pathParams, queryParams)
         runCatching {
-            resourcesFormat.decodeFromParameters(child as KSerializer<T>, parameters)
+            resourcesFormat.decodeFromParameters(child as KSerializer<T>, merged)
         }.getOrNull()
     }
 }
@@ -88,31 +90,4 @@ private fun resourceSerializers(serializer: KSerializer<*>): List<KSerializer<*>
 
         else -> if (descriptor.annotations.any { it is Resource }) listOf(serializer) else emptyList()
     }
-}
-
-/**
- * Matches a Ktor [ResourcesFormat.encodeToPathPattern] result (no leading slash) to a normalized path.
- */
-private fun matchResourcePath(pattern: String, normalizedPath: String): Parameters? {
-    if (!pattern.contains('{')) {
-        val expected = normalizePath(if (pattern.isEmpty()) "/" else "/$pattern")
-        return if (expected == normalizedPath) Parameters.Empty else null
-    }
-
-    val patternParts = pattern.split('/')
-    val pathParts = if (normalizedPath == "/") emptyList() else normalizedPath.removePrefix("/").split('/')
-    if (patternParts.size != pathParts.size) return null
-
-    val parameters = ParametersBuilder()
-    for ((part, value) in patternParts.zip(pathParts)) {
-        if (part.startsWith('{') && part.endsWith('}')) {
-            val name = part.substring(1, part.lastIndex)
-                .removeSuffix("?")
-                .removeSuffix("...")
-            parameters.append(name, value)
-        } else if (part != value) {
-            return null
-        }
-    }
-    return parameters.build()
 }

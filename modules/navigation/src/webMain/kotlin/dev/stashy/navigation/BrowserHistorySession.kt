@@ -16,8 +16,11 @@ internal class BrowserHistorySession<Entry : GroupNavKey<Group>, Group : Any>(
     private var suppressPopState = false
     private var popStateListener: ((Event) -> Unit)? = null
 
+    private fun currentLocation(): String =
+        normalizeResourceLocation(window.location.pathname + window.location.search)
+
     suspend fun bind() {
-        val initial = parsePath(window.location.pathname)
+        val initial = parsePath(currentLocation())
         backStack.syncTo(initial)
         window.history.replaceState(null, "", pathOf(initial))
         navigableDepth = 0
@@ -29,9 +32,9 @@ internal class BrowserHistorySession<Entry : GroupNavKey<Group>, Group : Any>(
 
     private fun syncStackToHistory(stack: List<Entry>) {
         val path = pathOf(stack.last())
-        val locationPath = normalizePath(window.location.pathname)
+        val locationPath = currentLocation()
 
-        if (path == locationPath) {
+        if (normalizeResourceLocation(path) == locationPath) {
             lastSize = stack.size
             return
         }
@@ -67,9 +70,9 @@ internal class BrowserHistorySession<Entry : GroupNavKey<Group>, Group : Any>(
                 suppressPopState = false
                 lastSize = backStack.backStack.size
             } else {
-                val path = normalizePath(window.location.pathname)
+                val location = currentLocation()
                 val sizeBefore = backStack.backStack.size
-                backStack.syncTo(parsePath(path))
+                backStack.syncTo(parsePath(location))
                 val sizeAfter = backStack.backStack.size
                 navigableDepth = (navigableDepth + (sizeAfter - sizeBefore)).coerceAtLeast(0)
                 lastSize = sizeAfter

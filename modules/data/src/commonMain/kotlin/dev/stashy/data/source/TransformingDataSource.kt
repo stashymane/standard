@@ -11,5 +11,5 @@ internal class TransformingDataSource<T, R>(
     override suspend fun await(): Result<R> = source.await().mapCatching(transform)
 }
 
-fun <T, R> DataSource<T>.map(transform: (T) -> R): DataSource<R> =
+public fun <T, R> DataSource<T>.map(transform: (T) -> R): DataSource<R> =
     TransformingDataSource(this, transform)

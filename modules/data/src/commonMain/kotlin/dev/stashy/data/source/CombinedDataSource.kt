@@ -23,7 +23,7 @@ internal class CombinedDataSource<A, B, R>(
     }
 }
 
-fun <A, B, R> combine(
+public fun <A, B, R> combine(
     first: DataSource<A>,
     second: DataSource<B>,
     transform: (A, B) -> R,

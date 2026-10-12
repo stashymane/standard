@@ -13,6 +13,8 @@ plugins {
 }
 
 kotlin {
+    explicitApi()
+    
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         binaries.library()

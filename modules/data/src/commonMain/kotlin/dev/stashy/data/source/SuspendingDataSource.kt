@@ -5,7 +5,7 @@ import kotlinx.coroutines.CancellationException
 import kotlin.jvm.JvmInline
 
 @JvmInline
-value class SuspendingDataSource<T>(
+internal value class SuspendingDataSource<T>(
     private val load: suspend () -> T,
 ) : DataSource<T> {
     override fun getOrNull(): T? = null

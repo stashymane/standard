@@ -1,19 +1,22 @@
 package dev.stashy.navigation.resources
 
-import dev.stashy.navigation.InternalNavApi
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.resources.serialization.*
-import kotlinx.serialization.*
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.InternalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.AbstractDecoder
+import kotlinx.serialization.encoding.AbstractEncoder
+import kotlinx.serialization.findPolymorphicSerializer
 import kotlinx.serialization.internal.AbstractPolymorphicSerializer
 import kotlinx.serialization.modules.EmptySerializersModule
 import kotlinx.serialization.modules.SerializersModule
 
-@InternalNavApi
-public val defaultResourcesFormat: ResourcesFormat = ResourcesFormat()
+@PublishedApi
+internal val defaultResourcesFormat: ResourcesFormat = ResourcesFormat()
 
 @OptIn(ExperimentalSerializationApi::class)
 private object SerialNameLookup : AbstractDecoder() {
@@ -21,37 +24,58 @@ private object SerialNameLookup : AbstractDecoder() {
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int = error("unused")
 }
 
+@OptIn(ExperimentalSerializationApi::class)
+private object SerialNameLookupEncoder : AbstractEncoder() {
+    override val serializersModule: SerializersModule = EmptySerializersModule()
+
+    override fun encodeValue(value: Any) = Unit
+}
+
 /**
  * Builds a resource location (Ktor [fullPath]: encoded path and query)
  * for a [@Resource][Resource]-annotated serializable instance.
  */
-@OptIn(InternalSerializationApi::class)
-@Suppress("UNCHECKED_CAST")
-@InternalNavApi
-public fun <T : Any> T.toResourcePath(resourcesFormat: ResourcesFormat = defaultResourcesFormat): String {
-    val serializer = this::class.serializer() as KSerializer<T>
+@PublishedApi
+internal fun <T : Any> T.toResourcePath(
+    rootSerializer: KSerializer<T>,
+    resourcesFormat: ResourcesFormat = defaultResourcesFormat,
+): String {
+    val serializer = resourcePathSerializer(rootSerializer, this)
     val builder = URLBuilder()
     href(resourcesFormat, serializer, this, builder)
     val full = builder.build().fullPath
     return normalizeResourceLocation(full.ifEmpty { "/" })
 }
 
+@OptIn(InternalSerializationApi::class)
+private fun <T : Any> resourcePathSerializer(
+    rootSerializer: KSerializer<T>,
+    value: T,
+): KSerializer<T> {
+    val polymorphic = rootSerializer as? AbstractPolymorphicSerializer<T> ?: return rootSerializer
+    val strategy = polymorphic.findPolymorphicSerializer(SerialNameLookupEncoder, value)
+    check(strategy is KSerializer<T>) {
+        "Resource route serializer must be a KSerializer, got ${strategy::class.simpleName}"
+    }
+    return strategy
+}
+
 /**
  * Resolves a resource location to a [@Resource][Resource]-annotated subtype of [T].
  */
-@OptIn(InternalNavApi::class)
+@PublishedApi
 internal inline fun <reified T : Any> fromResourcePath(
-    location: String,
-    resourcesFormat: ResourcesFormat = defaultResourcesFormat,
-): T? = fromResourcePath(location, serializer(), resourcesFormat)
-
-@Suppress("UNCHECKED_CAST")
-@InternalNavApi
-public fun <T : Any> fromResourcePath(
     location: String,
     rootSerializer: KSerializer<T>,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
-): T? {
+): T? = decodeFromResourcePath(location, rootSerializer, resourcesFormat) as? T
+
+@PublishedApi
+internal fun decodeFromResourcePath(
+    location: String,
+    rootSerializer: KSerializer<*>,
+    resourcesFormat: ResourcesFormat,
+): Any? {
     val (path, query) = splitResourceLocation(location)
     val normalizedPath = normalizeResourcePath(path)
     val queryParams = if (query.isNullOrEmpty()) Parameters.Empty else parseQueryString(query)
@@ -69,26 +93,28 @@ public fun <T : Any> fromResourcePath(
 
         val merged = mergeResourceParameters(pathParams, queryParams)
         runCatching {
-            resourcesFormat.decodeFromParameters(child as KSerializer<T>, merged)
+            resourcesFormat.decodeFromParameters(child, merged)
         }.getOrNull()
     }
 }
 
 @OptIn(InternalSerializationApi::class, ExperimentalSerializationApi::class)
-@Suppress("UNCHECKED_CAST")
 private fun resourceSerializers(serializer: KSerializer<*>): List<KSerializer<*>> {
     val descriptor = serializer.descriptor
     return when (descriptor.kind) {
         is PolymorphicKind.SEALED -> {
-            val polymorphic = serializer as AbstractPolymorphicSerializer<Any>
+            val polymorphic = serializer as? AbstractPolymorphicSerializer<*> ?: return emptyList()
             val subtypes = descriptor.getElementDescriptor(1)
             buildList {
                 for (index in 0 until subtypes.elementsCount) {
-                    val child = polymorphic.findPolymorphicSerializer(
-                        SerialNameLookup,
-                        subtypes.getElementName(index)
-                    ) as KSerializer<*>
-                    addAll(resourceSerializers(child))
+                    when (
+                        val strategy = polymorphic.findPolymorphicSerializer(
+                            SerialNameLookup,
+                            subtypes.getElementName(index),
+                        )
+                    ) {
+                        is KSerializer<*> -> addAll(resourceSerializers(strategy))
+                    }
                 }
             }
         }

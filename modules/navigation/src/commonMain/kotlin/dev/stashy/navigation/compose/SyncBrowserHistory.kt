@@ -47,7 +47,7 @@ public inline fun <reified Entry : NavKey> SyncBrowserHistory(
 ) {
     SyncBrowserHistory(
         backStack = backStack,
-        pathOf = { it.toResourcePath(resourcesFormat) },
+        pathOf = { it.toResourcePath(serializer<Entry>(), resourcesFormat) },
         parsePath = { location ->
             fromResourcePath(location, serializer<Entry>(), resourcesFormat)
                 ?: backStack.last()

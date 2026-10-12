@@ -25,7 +25,7 @@ jobs:
           submodules: 'true'
 
       - name: Prepare Java & Gradle
-        uses: stashymane/actions/prepare-gradle@9142e1d657c0f76b57ebf1f5bcfeb4ab24283ff4
+        uses: stashymane/actions/prepare-gradle@a4bdc027bd0aa9a31b817f406294bf0070c6ec76
         with:
           gradle-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
@@ -39,9 +39,11 @@ jobs:
 
       - name: Resolve version
         id: version
-        uses: stashymane/actions/get-version@9142e1d657c0f76b57ebf1f5bcfeb4ab24283ff4
+        uses: stashymane/actions/get-version@a4bdc027bd0aa9a31b817f406294bf0070c6ec76
         with:
           snapshot: ${{ github.ref_type == 'tag' && 'false' || 'true' }}
+          # GitHub packages doesn't allow overwriting snapshot versions
+          snapshot-commit-suffix: 'true'
 
       - name: Publish to GitHub Packages
         env:

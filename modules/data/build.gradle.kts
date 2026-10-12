@@ -7,6 +7,9 @@ plugins {
 
     id("multiplatform.target.jvm")
     id("multiplatform.target.wasmJs")
+
+    alias(libs.plugins.mavenPublish)
+    id("plugins.publish.github")
 }
 
 kotlin {

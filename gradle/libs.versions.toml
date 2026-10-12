@@ -1,6 +1,8 @@
 [versions]
-jvm = "27"
+jvm = "25"
 jvm-target = "17"
+
+mavenPublish = "0.37.0"
 
 kotest = "6.2.5"
 testResources = "0.16.2"
@@ -8,3 +10,6 @@ testResources = "0.16.2"
 [libraries]
 kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 testResources = { module = "com.goncalossilva:resources", version.ref = "testResources" }
+
+[plugins]
+mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

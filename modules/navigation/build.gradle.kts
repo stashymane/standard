@@ -8,8 +8,11 @@ plugins {
     alias(androidLibs.plugins.library)
 
     id("multiplatform.target.jvmDesktop")
-    id("multiplatform.target.wasmJs")
+    id("multiplatform.target.wasmJs.browser")
     id("multiplatform.target.androidLibrary")
+
+    alias(libs.plugins.mavenPublish)
+    id("plugins.publish.github")
 }
 
 kotlin {

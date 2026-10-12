@@ -7,6 +7,7 @@ plugins {
 
     id("multiplatform.target.jvm")
     id("multiplatform.target.wasmJs")
+    id("multiplatform.target.js")
 
     alias(libs.plugins.mavenPublish)
     id("plugins.publish.github")
@@ -14,7 +15,7 @@ plugins {
 
 kotlin {
     explicitApi()
-    
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         binaries.library()

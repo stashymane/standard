@@ -9,6 +9,7 @@ plugins {
 
     id("multiplatform.target.jvmDesktop")
     id("multiplatform.target.wasmJs.browser")
+    id("multiplatform.target.js.browser")
     id("multiplatform.target.androidLibrary")
 
     alias(libs.plugins.mavenPublish)
@@ -32,7 +33,6 @@ kotlin {
             api(ktorLibs.resources)
 
             implementation(composeLibs.jb.runtime)
-//            implementation(composeLibs.jb.ui)
 
             implementation(kotlinLibs.serialization.core)
             implementation(composeLibs.androidx.navigation3.runtime)
@@ -42,7 +42,7 @@ kotlin {
             implementation(kotlinLibs.test)
         }
 
-        wasmJsMain.dependencies {
+        webMain.dependencies {
             implementation(kotlinLibs.browser)
         }
     }

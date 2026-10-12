@@ -1,10 +1,14 @@
 package dev.stashy.navigation
 
-import io.ktor.resources.Resource
+import dev.stashy.navigation.resources.fromResourcePath
+import dev.stashy.navigation.resources.normalizeResourceLocation
+import dev.stashy.navigation.resources.splitResourceLocation
+import dev.stashy.navigation.resources.toResourcePath
+import io.ktor.resources.*
+import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlinx.serialization.Serializable
 
 @Serializable
 sealed interface TestRoutes {

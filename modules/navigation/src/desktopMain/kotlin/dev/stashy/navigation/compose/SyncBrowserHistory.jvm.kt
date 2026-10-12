@@ -1,4 +1,4 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavBackStack

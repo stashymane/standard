@@ -1,10 +1,14 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
-import io.ktor.resources.Resource
-import io.ktor.resources.serialization.ResourcesFormat
+import dev.stashy.navigation.resources.defaultResourcesFormat
+import dev.stashy.navigation.resources.fromResourcePath
+import dev.stashy.navigation.resources.toResourcePath
+import dev.stashy.navigation.syncTo
+import io.ktor.resources.*
+import io.ktor.resources.serialization.*
 import kotlinx.serialization.serializer
 
 /**
@@ -13,7 +17,7 @@ import kotlinx.serialization.serializer
  *
  * @param pathOf maps a stack entry to its URL location (Ktor [io.ktor.http.Url.fullPath], path + query)
  * @param parsePath maps a URL location to a stack entry
- * @param applyEntry applies [parsePath] results to the navigation stack (default: [NavBackStack.syncTo])
+ * @param applyEntry applies [parsePath] results to the navigation stack (default: [syncTo])
  */
 @Composable
 expect fun <Entry : NavKey> SyncBrowserHistory(

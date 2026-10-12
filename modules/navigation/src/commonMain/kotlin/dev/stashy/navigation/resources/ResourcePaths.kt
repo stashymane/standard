@@ -1,4 +1,4 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.resources
 
 import io.ktor.http.*
 import io.ktor.resources.*
@@ -20,7 +20,7 @@ private object SerialNameLookup : AbstractDecoder() {
 }
 
 /**
- * Builds a resource location (Ktor [io.ktor.http.Url.fullPath]: encoded path and query)
+ * Builds a resource location (Ktor [fullPath]: encoded path and query)
  * for a [@Resource][Resource]-annotated serializable instance.
  */
 @OptIn(InternalSerializationApi::class)

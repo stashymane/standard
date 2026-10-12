@@ -1,14 +1,9 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.resources
 
-import io.ktor.http.Parameters
-import io.ktor.http.ParametersBuilder
-import io.ktor.http.URLBuilder
-import io.ktor.http.appendPathSegments
-import io.ktor.http.fullPath
-import io.ktor.http.parseQueryString
+import io.ktor.http.*
 
 /**
- * Splits a resource location (Ktor [io.ktor.http.Url.fullPath]) into path and raw query (without `?`).
+ * Splits a resource location (Ktor [fullPath]) into path and raw query (without `?`).
  * Fragment (`#…`) is stripped.
  */
 fun splitResourceLocation(location: String): Pair<String, String?> {
@@ -18,7 +13,7 @@ fun splitResourceLocation(location: String): Pair<String, String?> {
         withoutHash to null
     } else {
         withoutHash.substring(0, queryStart) to
-            withoutHash.substring(queryStart + 1).takeIf { it.isNotEmpty() }
+                withoutHash.substring(queryStart + 1).takeIf { it.isNotEmpty() }
     }
 }
 

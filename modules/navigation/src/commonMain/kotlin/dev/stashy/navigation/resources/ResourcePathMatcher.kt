@@ -1,4 +1,4 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.resources
 
 import io.ktor.http.*
 
@@ -26,12 +26,12 @@ private fun matchSegments(
     if (patternIndex == pattern.size) return pathIndex == path.size
 
     return when (val segment = parsePatternSegment(pattern[patternIndex])) {
-        is PatternSegment.Constant -> {
+        is Constant -> {
             if (pathIndex >= path.size || path[pathIndex] != segment.value) return false
             matchSegments(pattern, patternIndex + 1, path, pathIndex + 1, out)
         }
 
-        is PatternSegment.Parameter -> {
+        is Parameter -> {
             if (segment.isTailcard) {
                 if (pathIndex > path.size) return false
                 val values = tailcardValues(path, pathIndex, segment.prefix.orEmpty()) ?: return false

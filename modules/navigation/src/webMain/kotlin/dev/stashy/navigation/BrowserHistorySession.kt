@@ -3,6 +3,7 @@ package dev.stashy.navigation
 import androidx.compose.runtime.snapshotFlow
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
+import dev.stashy.navigation.resources.normalizeResourceLocation
 import kotlinx.browser.window
 import org.w3c.dom.events.Event
 

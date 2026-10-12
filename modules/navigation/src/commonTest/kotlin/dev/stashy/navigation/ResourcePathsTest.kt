@@ -45,8 +45,8 @@ class NestedUsers {
     data class ById(val parent: NestedUsers = NestedUsers(), val id: Long)
 }
 
+@OptIn(InternalNavApi::class)
 class ResourcePathsTest {
-
     @Test
     fun homeRoundTrip() {
         val route = TestRoutes.Home

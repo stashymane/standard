@@ -9,7 +9,7 @@ import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.BrowserHistorySession
 
 @Composable
-actual fun <Entry : NavKey> SyncBrowserHistory(
+public actual fun <Entry : NavKey> SyncBrowserHistory(
     backStack: NavBackStack<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,

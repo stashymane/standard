@@ -7,7 +7,8 @@ import androidx.navigation3.runtime.NavKey
  * Updates this stack the way browser history would: pop back to [entry] if it is already
  * present, otherwise push it.
  */
-fun <Entry : NavKey> NavBackStack<Entry>.syncTo(entry: Entry) {
+@InternalNavApi
+public fun <Entry : NavKey> NavBackStack<Entry>.syncTo(entry: Entry) {
     if (isEmpty()) {
         add(entry)
         return

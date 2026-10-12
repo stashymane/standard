@@ -6,7 +6,7 @@ import io.ktor.http.*
  * Splits a resource location (Ktor [fullPath]) into path and raw query (without `?`).
  * Fragment (`#…`) is stripped.
  */
-fun splitResourceLocation(location: String): Pair<String, String?> {
+internal fun splitResourceLocation(location: String): Pair<String, String?> {
     val withoutHash = location.substringBefore('#')
     val queryStart = withoutHash.indexOf('?')
     return if (queryStart < 0) {
@@ -18,7 +18,7 @@ fun splitResourceLocation(location: String): Pair<String, String?> {
 }
 
 /** Normalizes only the path portion (leading slash, no trailing slash except root). */
-fun normalizeResourcePath(path: String): String {
+internal fun normalizeResourcePath(path: String): String {
     val trimmed = path.trimEnd('/')
     return when {
         trimmed.isEmpty() -> "/"
@@ -28,12 +28,12 @@ fun normalizeResourcePath(path: String): String {
 }
 
 /** @see normalizeResourcePath */
-fun normalizePath(path: String): String = normalizeResourcePath(path)
+internal fun normalizePath(path: String): String = normalizeResourcePath(path)
 
 /**
  * Normalizes path and query so equivalent locations compare equal (stable query encoding).
  */
-fun normalizeResourceLocation(location: String): String {
+internal fun normalizeResourceLocation(location: String): String {
     val (path, query) = splitResourceLocation(location)
     val normalizedPath = normalizeResourcePath(path)
     if (query.isNullOrEmpty()) return normalizedPath

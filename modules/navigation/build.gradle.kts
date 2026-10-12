@@ -16,6 +16,8 @@ plugins {
 }
 
 kotlin {
+    explicitApi()
+
     android {
         namespace = "dev.stashy.navigation"
     }
@@ -30,7 +32,7 @@ kotlin {
             api(ktorLibs.resources)
 
             implementation(composeLibs.jb.runtime)
-            implementation(composeLibs.jb.ui)
+//            implementation(composeLibs.jb.ui)
 
             implementation(kotlinLibs.serialization.core)
             implementation(composeLibs.androidx.navigation3.runtime)

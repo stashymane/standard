@@ -5,9 +5,9 @@ import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 
 @Composable
-actual fun <Entry : NavKey> SyncBrowserHistory(
+public actual fun <Entry : NavKey> SyncBrowserHistory(
     backStack: NavBackStack<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
     applyEntry: (Entry) -> Unit,
-) = Unit
+): Unit = Unit

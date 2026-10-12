@@ -1,5 +1,6 @@
 package dev.stashy.navigation.resources
 
+import dev.stashy.navigation.InternalNavApi
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.resources.serialization.*
@@ -11,7 +12,8 @@ import kotlinx.serialization.internal.AbstractPolymorphicSerializer
 import kotlinx.serialization.modules.EmptySerializersModule
 import kotlinx.serialization.modules.SerializersModule
 
-val defaultResourcesFormat: ResourcesFormat = ResourcesFormat()
+@InternalNavApi
+public val defaultResourcesFormat: ResourcesFormat = ResourcesFormat()
 
 @OptIn(ExperimentalSerializationApi::class)
 private object SerialNameLookup : AbstractDecoder() {
@@ -25,7 +27,8 @@ private object SerialNameLookup : AbstractDecoder() {
  */
 @OptIn(InternalSerializationApi::class)
 @Suppress("UNCHECKED_CAST")
-fun <T : Any> T.toResourcePath(resourcesFormat: ResourcesFormat = defaultResourcesFormat): String {
+@InternalNavApi
+public fun <T : Any> T.toResourcePath(resourcesFormat: ResourcesFormat = defaultResourcesFormat): String {
     val serializer = this::class.serializer() as KSerializer<T>
     val builder = URLBuilder()
     href(resourcesFormat, serializer, this, builder)
@@ -36,13 +39,15 @@ fun <T : Any> T.toResourcePath(resourcesFormat: ResourcesFormat = defaultResourc
 /**
  * Resolves a resource location to a [@Resource][Resource]-annotated subtype of [T].
  */
-inline fun <reified T : Any> fromResourcePath(
+@OptIn(InternalNavApi::class)
+internal inline fun <reified T : Any> fromResourcePath(
     location: String,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
 ): T? = fromResourcePath(location, serializer(), resourcesFormat)
 
 @Suppress("UNCHECKED_CAST")
-fun <T : Any> fromResourcePath(
+@InternalNavApi
+public fun <T : Any> fromResourcePath(
     location: String,
     rootSerializer: KSerializer<T>,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,

@@ -2,6 +2,6 @@ package dev.stashy.navigation
 
 import androidx.navigation3.runtime.NavKey
 
-interface GroupNavKey<G : Any> : NavKey {
-    val group: G?
+public interface GroupNavKey<G : Any> : NavKey {
+    public val group: G?
 }

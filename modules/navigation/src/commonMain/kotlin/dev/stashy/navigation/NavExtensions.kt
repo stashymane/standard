@@ -1,14 +1,15 @@
 package dev.stashy.navigation
 
-import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 
 /**
- * Updates this stack the way browser history would: pop back to [entry] if it is already
+ * Updates [this] stack the way browser history would: pop back to [entry] if it is already
  * present, otherwise push it.
+ *
+ * Uses [add] and [removeAt] on the list; [GroupBackStack] overrides those for group-aware navigation.
  */
 @InternalNavApi
-public fun <Entry : NavKey> NavBackStack<Entry>.syncTo(entry: Entry) {
+public fun <Entry : NavKey> MutableList<Entry>.syncTo(entry: Entry) {
     if (isEmpty()) {
         add(entry)
         return

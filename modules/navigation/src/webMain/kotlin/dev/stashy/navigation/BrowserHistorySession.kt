@@ -1,7 +1,6 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.snapshotFlow
-import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.resources.normalizeResourceLocation
 import kotlinx.browser.window
@@ -9,7 +8,7 @@ import org.w3c.dom.events.Event
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal class BrowserHistorySession<Entry : NavKey>(
-    private val backStack: NavBackStack<Entry>,
+    private val backStack: MutableList<Entry>,
     private val pathOf: (Entry) -> String,
     private val parsePath: (String) -> Entry,
     private val applyEntry: (Entry) -> Unit,

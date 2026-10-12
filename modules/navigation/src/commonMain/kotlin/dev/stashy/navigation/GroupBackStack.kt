@@ -1,13 +1,17 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.navigation3.runtime.NavBackStack
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.snapshots.StateObject
+import androidx.compose.runtime.snapshots.StateRecord
 
 public class GroupBackStack<Key : GroupNavKey<Group>, Group : Any>(
-    private val initial: Key
-) {
+    private val initial: Key,
+    private val base: SnapshotStateList<Key> = mutableStateListOf(initial),
+) : MutableList<Key> by base, StateObject {
     private val stacks = linkedMapOf<Group, MutableList<Key>>()
     private val initialGroup =
         initial.group ?: throw IllegalArgumentException("Initial entry must have group")
@@ -16,20 +20,19 @@ public class GroupBackStack<Key : GroupNavKey<Group>, Group : Any>(
         private set
     private var currentStack = mutableListOf<Key>()
 
-    public val backStack: NavBackStack<Key> = NavBackStack(initial)
-
     public val current: Key
-        get() = backStack.last()
+        get() = last()
 
-    public fun add(entry: Key) {
-        val group = entry.group
+    override fun add(element: Key): Boolean {
+        val group = element.group
         if (group != null && group != currentGroup)
             swapTo(group)
 
-        if (currentStack.lastOrNull() != entry)
-            currentStack.add(entry)
+        if (currentStack.lastOrNull() != element)
+            currentStack.add(element)
 
         update()
+        return true
     }
 
     public fun removeLast() {
@@ -63,6 +66,15 @@ public class GroupBackStack<Key : GroupNavKey<Group>, Group : Any>(
         update()
     }
 
+    override fun removeAt(index: Int): Key {
+        check(index == lastIndex) {
+            "GroupBackStack only supports removing the top entry (index must be lastIndex)"
+        }
+        val removed = get(index)
+        removeLast()
+        return removed
+    }
+
     private fun swapTo(group: Group) {
         if (currentStack.isNotEmpty())
             stacks[currentGroup] = currentStack
@@ -76,7 +88,7 @@ public class GroupBackStack<Key : GroupNavKey<Group>, Group : Any>(
     }
 
     private fun update() {
-        backStack.apply {
+        base.apply {
             clear()
             add(initial)
             addAll(stacks.flatMap(Map.Entry<Group, List<Key>>::value))
@@ -84,6 +96,18 @@ public class GroupBackStack<Key : GroupNavKey<Group>, Group : Any>(
         }
     }
 
-    public fun isEmpty(): Boolean = backStack.size <= 1
-    public fun isNotEmpty(): Boolean = backStack.size > 1
+    public fun isAtRoot(): Boolean = size <= 1
+
+    override val firstStateRecord: StateRecord
+        get() = base.firstStateRecord
+
+    override fun prependStateRecord(value: StateRecord) {
+        base.prependStateRecord(value)
+    }
+
+    override fun mergeRecords(
+        previous: StateRecord,
+        current: StateRecord,
+        applied: StateRecord,
+    ): StateRecord? = base.mergeRecords(previous, current, applied)
 }

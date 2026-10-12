@@ -1,13 +1,12 @@
 package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
-import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.InternalNavApi
 import dev.stashy.navigation.resources.defaultResourcesFormat
+import dev.stashy.navigation.syncTo
 import dev.stashy.navigation.resources.fromResourcePath
 import dev.stashy.navigation.resources.toResourcePath
-import dev.stashy.navigation.syncTo
 import io.ktor.resources.*
 import io.ktor.resources.serialization.*
 import kotlinx.serialization.serializer
@@ -23,10 +22,10 @@ import kotlinx.serialization.serializer
 @OptIn(InternalNavApi::class)
 @Composable
 public expect fun <Entry : NavKey> SyncBrowserHistory(
-    backStack: NavBackStack<Entry>,
+    backStack: MutableList<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
-    applyEntry: (Entry) -> Unit = { backStack.syncTo(it) },
+    applyEntry: (Entry) -> Unit = { entry -> backStack.syncTo(entry) },
 )
 
 /**
@@ -41,9 +40,9 @@ public expect fun <Entry : NavKey> SyncBrowserHistory(
 @OptIn(InternalNavApi::class)
 @Composable
 public inline fun <reified Entry : NavKey> SyncBrowserHistory(
-    backStack: NavBackStack<Entry>,
+    backStack: MutableList<Entry>,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
-    noinline applyEntry: (Entry) -> Unit = { backStack.syncTo(it) },
+    noinline applyEntry: (Entry) -> Unit = { entry -> backStack.syncTo(entry) },
 ) {
     SyncBrowserHistory(
         backStack = backStack,

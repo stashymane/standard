@@ -4,13 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.BrowserHistorySession
 
 @Composable
 public actual fun <Entry : NavKey> SyncBrowserHistory(
-    backStack: NavBackStack<Entry>,
+    backStack: MutableList<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
     applyEntry: (Entry) -> Unit,

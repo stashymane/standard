@@ -24,11 +24,13 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(composeLibs.jb.runtime)
             api(ktorLibs.resources)
-            api(kotlinLibs.serialization.core)
 
+            implementation(composeLibs.jb.runtime)
             implementation(composeLibs.jb.ui)
+
+            implementation(kotlinLibs.serialization.core)
+            implementation(composeLibs.androidx.navigation3.runtime)
         }
 
         wasmJsMain.dependencies {

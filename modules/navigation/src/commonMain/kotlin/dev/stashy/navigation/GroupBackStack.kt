@@ -1,31 +1,27 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.navigation3.runtime.NavBackStack
 
-class MultiBackStack<Entry : MultiBackStack.Entry<Group>, Group : Any>(
-    private val initial: Entry
+class GroupBackStack<Key : GroupNavKey<Group>, Group : Any>(
+    private val initial: Key
 ) {
-    interface Entry<T> {
-        val group: T?
-    }
-
-    private val stacks = linkedMapOf<Group, MutableList<Entry>>()
+    private val stacks = linkedMapOf<Group, MutableList<Key>>()
     private val initialGroup =
         initial.group ?: throw IllegalArgumentException("Initial entry must have group")
 
     var currentGroup by mutableStateOf(initialGroup)
         private set
-    private var currentStack = mutableListOf<Entry>()
+    private var currentStack = mutableListOf<Key>()
 
-    val backStack = mutableStateListOf(initial)
+    val backStack = NavBackStack(initial)
 
-    val current: Entry
+    val current: Key
         get() = backStack.last()
 
-    fun add(entry: Entry) {
+    fun add(entry: Key) {
         val group = entry.group
         if (group != null && group != currentGroup)
             swapTo(group)
@@ -46,7 +42,7 @@ class MultiBackStack<Entry : MultiBackStack.Entry<Group>, Group : Any>(
         update()
     }
 
-    fun replace(entry: Entry) {
+    fun replace(entry: Key) {
         currentStack.removeLastOrNull()
 
         val group = entry.group
@@ -58,7 +54,7 @@ class MultiBackStack<Entry : MultiBackStack.Entry<Group>, Group : Any>(
         update()
     }
 
-    fun swapToGroup(root: Entry) {
+    fun swapToGroup(root: Key) {
         val group = root.group ?: throw IllegalArgumentException("Entry must have group")
         swapTo(group)
         if (currentStack.isEmpty() && !(currentGroup == initialGroup && stacks.isEmpty()))
@@ -71,7 +67,7 @@ class MultiBackStack<Entry : MultiBackStack.Entry<Group>, Group : Any>(
      * Move the stack to [entry] the way browser history would:
      * pop until it is current when it already exists, otherwise push it.
      */
-    fun syncTo(entry: Entry) {
+    fun syncTo(entry: Key) {
         if (current == entry) return
 
         if (backStack.lastIndexOf(entry) >= 0) {
@@ -96,8 +92,12 @@ class MultiBackStack<Entry : MultiBackStack.Entry<Group>, Group : Any>(
     }
 
     private fun update() {
-        backStack.clear()
-        backStack.addAll(listOf(initial) + stacks.flatMap(Map.Entry<Group, List<Entry>>::value) + currentStack)
+        backStack.apply {
+            clear()
+            add(initial)
+            addAll(stacks.flatMap(Map.Entry<Group, List<Key>>::value))
+            addAll(currentStack)
+        }
     }
 
     fun isEmpty() = backStack.size <= 1

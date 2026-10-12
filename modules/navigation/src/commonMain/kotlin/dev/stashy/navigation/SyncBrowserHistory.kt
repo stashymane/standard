@@ -10,8 +10,8 @@ import androidx.compose.runtime.Composable
  * @param parsePath maps a URL path to a stack entry (must not return null for handled routes)
  */
 @Composable
-expect fun <Entry : MultiBackStack.Entry<Group>, Group : Any> SyncBrowserHistory(
-    backStack: MultiBackStack<Entry, Group>,
+expect fun <Entry : GroupNavKey<Group>, Group : Any> SyncBrowserHistory(
+    backStack: GroupBackStack<Entry, Group>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
 )

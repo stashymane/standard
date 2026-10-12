@@ -1,7 +1,7 @@
 [versions]
 composeMultiplatform = "1.12.1"
 
-navigation3 = "1.1.2"
+navigation3 = "1.2.0"
 lifecycle = "2.11.0"
 
 [libraries]
@@ -12,6 +12,7 @@ jb-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "
 jb-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 jb-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 
+androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
 androidx-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
 
 lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }

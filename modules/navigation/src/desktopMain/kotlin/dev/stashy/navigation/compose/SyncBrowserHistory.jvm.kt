@@ -5,7 +5,7 @@ import androidx.navigation3.runtime.NavKey
 
 @Composable
 public actual fun <Entry : NavKey> SyncBrowserHistory(
-    backStack: MutableList<Entry>,
+    backStack: List<Entry>,
     pathOf: (Entry) -> String,
     parsePath: (String) -> Entry,
     applyEntry: (Entry) -> Unit,

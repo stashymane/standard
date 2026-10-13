@@ -8,7 +8,7 @@ import org.w3c.dom.events.Event
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal class BrowserHistorySession<Entry : NavKey>(
-    private val backStack: MutableList<Entry>,
+    private val backStack: List<Entry>,
     private val pathOf: (Entry) -> String,
     private val parsePath: (String) -> Entry,
     private val applyEntry: (Entry) -> Unit,

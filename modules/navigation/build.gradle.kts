@@ -40,6 +40,7 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlinLibs.test)
+            implementation(kotlinLibs.coroutines.test)
         }
 
         webMain.dependencies {

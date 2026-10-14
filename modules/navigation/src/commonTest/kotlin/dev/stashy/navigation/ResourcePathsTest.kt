@@ -45,7 +45,6 @@ class NestedUsers {
     data class ById(val parent: NestedUsers = NestedUsers(), val id: Long)
 }
 
-@OptIn(InternalNavApi::class)
 class ResourcePathsTest {
     private val testRoutesSerializer = TestRoutes.serializer()
     private val nestedByIdSerializer = NestedUsers.ById.serializer()

@@ -1,17 +1,16 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.snapshotFlow
-import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.resources.normalizeResourceLocation
 import kotlinx.browser.window
 import org.w3c.dom.events.Event
 
 @OptIn(ExperimentalWasmJsInterop::class)
-internal class BrowserHistorySession<Entry : NavKey>(
-    private val backStack: List<Entry>,
-    private val pathOf: (Entry) -> String,
-    private val parsePath: (String) -> Entry,
-    private val applyEntry: (Entry) -> Unit,
+internal class BrowserHistorySession(
+    private val backStack: List<NavDestination>,
+    private val pathOf: (NavDestination) -> String,
+    private val parsePath: (String) -> NavDestination,
+    private val applyEntry: (NavDestination) -> Unit,
 ) {
     /** How many `pushState` entries this session owns above the initial replaceState. */
     private var navigableDepth = 0
@@ -33,7 +32,7 @@ internal class BrowserHistorySession<Entry : NavKey>(
             .collect { stack -> syncStackToHistory(stack) }
     }
 
-    private fun syncStackToHistory(stack: List<Entry>) {
+    private fun syncStackToHistory(stack: List<NavDestination>) {
         val path = pathOf(stack.last())
         val locationPath = currentLocation()
 

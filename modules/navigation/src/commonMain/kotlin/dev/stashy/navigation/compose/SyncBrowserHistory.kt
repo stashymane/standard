@@ -1,96 +1,92 @@
 package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
-import androidx.navigation3.runtime.NavKey
-import dev.stashy.navigation.InternalNavApi
+import dev.stashy.navigation.NavDestination
+import dev.stashy.navigation.NavigationState
+import dev.stashy.navigation.Navigator
 import dev.stashy.navigation.resources.defaultResourcesFormat
 import dev.stashy.navigation.resources.fromResourcePath
 import dev.stashy.navigation.resources.toResourcePath
-import dev.stashy.navigation.syncTo
-import io.ktor.resources.*
-import io.ktor.resources.serialization.*
+import io.ktor.resources.Resource
+import io.ktor.resources.serialization.ResourcesFormat
 import kotlinx.serialization.serializer
-import kotlin.jvm.JvmName
 
 /**
- * Keeps [backStack] in sync with the browser History API on web targets.
+ * Keeps [NavigationState.entries] in sync with the browser History API on web targets.
  * No-op on non-browser platforms.
  *
- * @param backStack read-only navigation history. Must be a stable, snapshot-backed list (for example
- * [dev.stashy.navigation.GroupBackStack.flattened] or a [androidx.compose.runtime.snapshots.SnapshotStateList]),
- * not an ephemeral copy such as `someStack.toList()`.
- * @param pathOf maps a stack entry to its URL location (Ktor [io.ktor.http.Url.fullPath], path + query)
- * @param parsePath maps a URL location to a stack entry
- * @param applyEntry applies [parsePath] results to the navigation stack
+ * @param state navigation state whose [NavigationState.entries] are observed
+ * @param pathOf maps a destination to its URL location (Ktor [io.ktor.http.Url.fullPath], path + query)
+ * @param parsePath maps a URL location to a destination
+ * @param applyEntry applies [parsePath] results (typically [Navigator.popToOrNavigate])
  */
 @Composable
-public expect fun <Entry : NavKey> SyncBrowserHistory(
-    backStack: List<Entry>,
-    pathOf: (Entry) -> String,
-    parsePath: (String) -> Entry,
-    applyEntry: (Entry) -> Unit,
+public expect fun SyncBrowserHistory(
+    state: NavigationState,
+    pathOf: (NavDestination) -> String,
+    parsePath: (String) -> NavDestination,
+    applyEntry: (NavDestination) -> Unit,
 )
 
 /**
- * Keeps a [MutableList] back stack in sync with the browser History API.
+ * Keeps [navigator]'s [NavigationState.entries] in sync with the browser History API,
+ * applying URL changes via [Navigator.popToOrNavigate].
  */
-@OptIn(InternalNavApi::class)
 @Composable
-public fun <Entry : NavKey> SyncBrowserHistory(
-    backStack: MutableList<Entry>,
-    pathOf: (Entry) -> String,
-    parsePath: (String) -> Entry,
-    applyEntry: (Entry) -> Unit = { entry -> backStack.syncTo(entry) },
+public fun SyncBrowserHistory(
+    navigator: Navigator,
+    pathOf: (NavDestination) -> String,
+    parsePath: (String) -> NavDestination,
 ) {
     SyncBrowserHistory(
-        backStack = backStack,
+        state = navigator.state,
         pathOf = pathOf,
         parsePath = parsePath,
-        applyEntry = applyEntry,
+        applyEntry = navigator::popToOrNavigate,
     )
 }
 
 /**
- * Keeps [backStack] in sync with the browser History API using [@Resource][Resource] routes.
+ * Keeps [state] in sync with the browser History API using [@Resource][Resource] routes.
  *
  * [Entry] must be a `@Serializable` sealed type whose navigable variants are `@Resource`-annotated
  * (same model as [Ktor type-safe routing](https://ktor.io/docs/server-resources.html)).
  *
- * Unrecognized browser locations fall back to the current top of [backStack], then the URL is
- * corrected to match that entry.
+ * Unrecognized browser locations fall back to the current top of [NavigationState.entries], then
+ * the URL is corrected to match that entry.
  */
 @Composable
-public inline fun <reified Entry : NavKey> SyncBrowserHistory(
-    backStack: List<Entry>,
+public inline fun <reified Entry : NavDestination> SyncBrowserHistory(
+    state: NavigationState,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
     noinline applyEntry: (Entry) -> Unit,
 ) {
+    @Suppress("UNCHECKED_CAST")
+    val history = state.entries as List<Entry>
     SyncBrowserHistory(
-        backStack = backStack,
-        pathOf = { it.toResourcePath(serializer<Entry>(), resourcesFormat) },
+        state = state,
+        pathOf = { destination ->
+            (destination as Entry).toResourcePath(serializer<Entry>(), resourcesFormat)
+        },
         parsePath = { location ->
             fromResourcePath(location, serializer<Entry>(), resourcesFormat)
-                ?: backStack.last()
+                ?: history.last()
         },
-        applyEntry = applyEntry,
+        applyEntry = { destination -> applyEntry(destination as Entry) },
     )
 }
 
 /**
- * Resource-based browser sync for a [MutableList] back stack.
+ * Resource-based browser sync for a [Navigator].
  */
-@OptIn(InternalNavApi::class)
 @Composable
-@JvmName("SyncBrowserHistoryMutableList")
-public inline fun <reified Entry : NavKey> SyncBrowserHistory(
-    backStack: MutableList<Entry>,
+public inline fun <reified Entry : NavDestination> SyncBrowserHistory(
+    navigator: Navigator,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
-    noinline applyEntry: (Entry) -> Unit = { entry -> backStack.syncTo(entry) },
 ) {
-    val history: List<Entry> = backStack
-    SyncBrowserHistory(
-        backStack = history,
+    SyncBrowserHistory<Entry>(
+        state = navigator.state,
         resourcesFormat = resourcesFormat,
-        applyEntry = applyEntry,
+        applyEntry = { entry -> navigator.popToOrNavigate(entry) },
     )
 }

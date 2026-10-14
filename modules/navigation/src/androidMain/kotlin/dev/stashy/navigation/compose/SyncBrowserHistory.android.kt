@@ -1,12 +1,13 @@
 package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
-import androidx.navigation3.runtime.NavKey
+import dev.stashy.navigation.NavDestination
+import dev.stashy.navigation.NavigationState
 
 @Composable
-public actual fun <Entry : NavKey> SyncBrowserHistory(
-    backStack: List<Entry>,
-    pathOf: (Entry) -> String,
-    parsePath: (String) -> Entry,
-    applyEntry: (Entry) -> Unit,
+public actual fun SyncBrowserHistory(
+    state: NavigationState,
+    pathOf: (NavDestination) -> String,
+    parsePath: (String) -> NavDestination,
+    applyEntry: (NavDestination) -> Unit,
 ): Unit = Unit

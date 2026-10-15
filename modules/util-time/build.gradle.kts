@@ -34,6 +34,10 @@ kotlin {
     wasmJs {
         binaries.executable()
     }
+    
+    js {
+        binaries.executable()
+    }
 
     sourceSets {
         commonMain.dependencies {

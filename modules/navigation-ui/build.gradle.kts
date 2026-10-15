@@ -28,6 +28,10 @@ kotlin {
         binaries.executable()
     }
 
+    js {
+        binaries.executable()
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(projects.modules.navigation)

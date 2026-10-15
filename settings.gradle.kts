@@ -44,6 +44,7 @@ plugins {
 include(
     "modules:data",
     "modules:navigation",
+    "modules:ui-gradients",
 )
 
 rootProject.name = "standard"

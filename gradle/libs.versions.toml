@@ -4,10 +4,15 @@ jvm-target = "17"
 
 mavenPublish = "0.37.0"
 
-kotest = "6.2.5"
+colormath = "3.7.0"
+
+kotest = "6.2.6"
 testResources = "0.16.2"
 
 [libraries]
+colormath-core = { module = "com.github.ajalt.colormath:colormath", version.ref = "colormath" }
+colormath-compose = { module = "com.github.ajalt.colormath:colormath-ext-jetpack-compose", version.ref = "colormath" }
+
 kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 testResources = { module = "com.goncalossilva:resources", version.ref = "testResources" }
 

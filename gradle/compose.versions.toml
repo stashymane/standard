@@ -3,6 +3,7 @@ composeMultiplatform = "1.12.2"
 
 navigation3 = "1.1.2"
 lifecycle = "2.11.0"
+material3 = "1.12.0-alpha03"
 
 [libraries]
 jb-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
@@ -11,6 +12,7 @@ jb-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultipla
 jb-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
 jb-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 jb-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
+jb-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
 
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
 androidx-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3" }

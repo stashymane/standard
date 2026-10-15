@@ -46,8 +46,9 @@ include(
     "modules:navigation",
     "modules:navigation-ui",
     "modules:util-time",
-    "modules:ui-gradients",
     "modules:ui-animation",
+    "modules:ui-components",
+    "modules:ui-gradients",
 )
 
 rootProject.name = "standard"

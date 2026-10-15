@@ -45,6 +45,7 @@ include(
     "modules:data",
     "modules:navigation",
     "modules:navigation-ui",
+    "modules:util-time",
     "modules:ui-gradients",
     "modules:ui-animation",
 )

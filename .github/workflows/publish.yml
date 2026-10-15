@@ -45,6 +45,9 @@ jobs:
           # GitHub packages doesn't allow overwriting snapshot versions
           snapshot-commit-suffix: 'true'
 
+      - name: Build library artifacts
+        run: ./gradlew publishToMavenLocal -Pversion=${{ steps.version.outputs.version }}
+
       - name: Publish to GitHub Packages
         env:
           ORG_GRADLE_PROJECT_githubPackagesUsername: ${{ github.repository_owner }}

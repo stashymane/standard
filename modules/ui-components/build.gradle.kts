@@ -37,10 +37,15 @@ kotlin {
             implementation(composeLibs.jb.runtime)
             implementation(composeLibs.jb.foundation)
             implementation(composeLibs.jb.material3)
+            implementation(composeLibs.jb.uiToolingPreview)
         }
 
         commonTest.dependencies {
             implementation(kotlinLibs.test)
         }
     }
+}
+
+dependencies {
+    "androidRuntimeClasspath"(composeLibs.jb.uiTooling)
 }

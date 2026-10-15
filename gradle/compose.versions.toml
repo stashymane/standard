@@ -1,7 +1,7 @@
 [versions]
-composeMultiplatform = "1.12.1"
+composeMultiplatform = "1.12.2"
 
-navigation3 = "1.2.0"
+navigation3 = "1.1.2"
 lifecycle = "2.11.0"
 
 [libraries]

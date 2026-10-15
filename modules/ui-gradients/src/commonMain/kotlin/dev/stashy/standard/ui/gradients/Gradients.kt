@@ -11,6 +11,7 @@ import com.github.ajalt.colormath.transform.sequence
 
 public object GradientDefaults {
     public const val STEPS: Int = 20
+    public val colorSpace: ColorSpace = ColorSpaces.Srgb
 }
 
 /**
@@ -18,7 +19,7 @@ public object GradientDefaults {
  */
 public fun easeColors(
     steps: Int = GradientDefaults.STEPS,
-    colorSpace: ColorSpace = ColorSpaces.Srgb,
+    colorSpace: ColorSpace = GradientDefaults.colorSpace,
     builder: InterpolatorBuilder.() -> Unit,
 ): List<Color> =
     Oklab.interpolator(builder)

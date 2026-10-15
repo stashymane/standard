@@ -4,7 +4,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.colorspace.ColorSpace
-import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import com.github.ajalt.colormath.transform.InterpolatorBuilder
 
 public fun Brush.Companion.easedLinearGradient(
@@ -12,7 +11,7 @@ public fun Brush.Companion.easedLinearGradient(
     end: Offset = Offset.Infinite,
     tileMode: TileMode = TileMode.Clamp,
     steps: Int = GradientDefaults.STEPS,
-    colorSpace: ColorSpace = ColorSpaces.Srgb,
+    colorSpace: ColorSpace = GradientDefaults.colorSpace,
     builder: InterpolatorBuilder.() -> Unit,
 ): Brush =
     Brush.linearGradient(
@@ -27,7 +26,7 @@ public fun Brush.Companion.easedHorizontalGradient(
     endX: Float = Float.POSITIVE_INFINITY,
     tileMode: TileMode = TileMode.Clamp,
     steps: Int = GradientDefaults.STEPS,
-    colorSpace: ColorSpace = ColorSpaces.Srgb,
+    colorSpace: ColorSpace = GradientDefaults.colorSpace,
     builder: InterpolatorBuilder.() -> Unit,
 ): Brush =
     Brush.horizontalGradient(
@@ -42,7 +41,7 @@ public fun Brush.Companion.easedVerticalGradient(
     endY: Float = Float.POSITIVE_INFINITY,
     tileMode: TileMode = TileMode.Clamp,
     steps: Int = GradientDefaults.STEPS,
-    colorSpace: ColorSpace = ColorSpaces.Srgb,
+    colorSpace: ColorSpace = GradientDefaults.colorSpace,
     builder: InterpolatorBuilder.() -> Unit,
 ): Brush =
     Brush.verticalGradient(
@@ -57,7 +56,7 @@ public fun Brush.Companion.easedRadialGradient(
     radius: Float = Float.POSITIVE_INFINITY,
     tileMode: TileMode = TileMode.Clamp,
     steps: Int = GradientDefaults.STEPS,
-    colorSpace: ColorSpace = ColorSpaces.Srgb,
+    colorSpace: ColorSpace = GradientDefaults.colorSpace,
     builder: InterpolatorBuilder.() -> Unit,
 ): Brush =
     Brush.radialGradient(
@@ -70,7 +69,7 @@ public fun Brush.Companion.easedRadialGradient(
 public fun Brush.Companion.easedSweepGradient(
     center: Offset = Offset.Unspecified,
     steps: Int = GradientDefaults.STEPS,
-    colorSpace: ColorSpace = ColorSpaces.Srgb,
+    colorSpace: ColorSpace = GradientDefaults.colorSpace,
     builder: InterpolatorBuilder.() -> Unit,
 ): Brush =
     Brush.sweepGradient(

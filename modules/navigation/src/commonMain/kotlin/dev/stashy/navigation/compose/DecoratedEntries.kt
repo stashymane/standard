@@ -11,11 +11,13 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import dev.stashy.navigation.GroupId
 import dev.stashy.navigation.NavDestination
 import dev.stashy.navigation.NavigationState
+import dev.stashy.navigation.groupMetadata
 
 /**
  * Converts [NavigationState] into decorated [NavEntry]s for [androidx.navigation3.ui.NavDisplay].
  *
  * Destinations render via [NavDestination.Content] unless overridden in [builder].
+ * Every entry’s metadata includes [dev.stashy.navigation.GroupIdKey].
  */
 @Composable
 public fun NavigationState.toDecoratedEntries(
@@ -24,7 +26,9 @@ public fun NavigationState.toDecoratedEntries(
     val provider =
         entryProvider(
             fallback = { destination ->
-                NavEntry(destination) { destination.Content() }
+                NavEntry(destination, metadata = destination.groupMetadata()) {
+                    destination.Content()
+                }
             },
             builder = builder,
         )
@@ -33,11 +37,25 @@ public fun NavigationState.toDecoratedEntries(
 
 /**
  * Converts [NavigationState] into decorated [NavEntry]s using a fully custom [entryProvider].
+ *
+ * [dev.stashy.navigation.GroupIdKey] is merged into each entry’s metadata from
+ * [NavDestination.group].
  */
 @Composable
 public fun NavigationState.toDecoratedEntries(
     entryProvider: (NavDestination) -> NavEntry<NavDestination>,
 ): List<NavEntry<NavDestination>> {
+    val providerWithGroup: (NavDestination) -> NavEntry<NavDestination> = { destination ->
+        val entry = entryProvider(destination)
+        NavEntry(
+            key = destination,
+            contentKey = entry.contentKey,
+            metadata = entry.metadata + destination.groupMetadata(),
+        ) {
+            entry.Content()
+        }
+    }
+
     val groupIds = backStacks.keys.toList()
     val decoratedEntries =
         groupIds.associateWith { groupId: GroupId ->
@@ -51,7 +69,7 @@ public fun NavigationState.toDecoratedEntries(
                 rememberDecoratedNavEntries(
                     backStack = stack,
                     entryDecorators = decorators,
-                    entryProvider = entryProvider,
+                    entryProvider = providerWithGroup,
                 )
             }
         }

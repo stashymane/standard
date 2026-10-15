@@ -44,6 +44,7 @@ plugins {
 include(
     "modules:data",
     "modules:navigation",
+    "modules:navigation-ui",
     "modules:ui-gradients",
     "modules:ui-animation",
 )

@@ -1,5 +1,6 @@
 package dev.stashy.standard.ui.gradients
 
+import androidx.compose.animation.core.Easing
 import androidx.compose.ui.graphics.Color
 import com.github.ajalt.colormath.extensions.android.composecolor.toColormathColor
 import com.github.ajalt.colormath.transform.InterpolatorBuilder
@@ -21,3 +22,7 @@ public fun InterpolatorBuilder.stop(
     position: Double,
     builder: InterpolatorStopBuilderContext = {},
 ): Unit = stop(color.toColormathColor(), position, builder)
+
+public fun InterpolatorBuilder.easing(value: Easing) {
+    easing = value.toEasingFunction()
+}

@@ -49,5 +49,4 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_githubPackagesUsername: ${{ github.repository_owner }}
           ORG_GRADLE_PROJECT_githubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
-          ORG_GRADLE_PROJECT_VERSION_NAME: ${{ steps.version.outputs.version }}
-        run: ./gradlew publishAllPublicationsToGithubPackagesRepository
+        run: ./gradlew publishAllPublicationsToGithubPackagesRepository -Pversion=${{ steps.version.outputs.version }}

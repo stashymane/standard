@@ -49,6 +49,7 @@ include(
     "modules:ui-animation",
     "modules:ui-components",
     "modules:ui-gradients",
+    "modules:ui-responsive",
 )
 
 rootProject.name = "standard"

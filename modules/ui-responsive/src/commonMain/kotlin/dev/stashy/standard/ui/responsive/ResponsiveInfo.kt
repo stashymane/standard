@@ -41,8 +41,7 @@ public value class HeightSize(public val valueDp: Int) {
 /**
  * Provides [ResponsiveInfo] to the composition tree.
  *
- * Defaults to a zero-size window (behaves as [ContainerSize.Compact]). Prefer providing
- * a value from [rememberResponsiveInfo] at the app root.
+ * Defaults to a window size of 0x0.
  */
 public val LocalResponsiveInfo: ProvidableCompositionLocal<ResponsiveInfo> = compositionLocalOf {
     ResponsiveInfo(width = WidthSize(0), height = HeightSize(0))

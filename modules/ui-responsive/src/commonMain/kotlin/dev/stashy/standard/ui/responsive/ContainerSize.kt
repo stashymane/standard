@@ -12,9 +12,9 @@ public enum class ContainerSize(
     /** Lower bound for height comparisons, in dp. */
     public val heightDp: Int,
 ) {
-    Compact(0, 0),
-    Medium(600, 480),
-    Expanded(840, 900),
+    ExtraSmall(480, 480),
+    Small(600, 480),
+    Medium(840, 900),
     Large(1200, 900),
     Desktop(1600, 900),
     ;

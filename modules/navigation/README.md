@@ -17,10 +17,12 @@ CompositionLocalProvider(LocalNavigator provides navigator) {
 
     // NavDisplay comes from navigation3-ui (app dependency)
     NavDisplay(
-        entries = state.toDecoratedEntries {
-            // optional manual overrides; everything else uses NavDestination.Content()
-            entry<Legacy> { LegacyScreen() }
-        },
+        backStack = state.entries,
+        entryDecorators = listOf(
+            rememberSaveableStateHolderNavEntryDecorator(),
+            rememberViewModelStoreNavEntryDecorator(),
+        ),
+        entryProvider = state::toEntry,
         onBack = { navigator.goBack() },
     )
 }

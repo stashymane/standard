@@ -36,7 +36,6 @@ kotlin {
 
             implementation(kotlinLibs.serialization.core)
             implementation(composeLibs.androidx.navigation3.runtime)
-            implementation(composeLibs.lifecycle.viewmodel.navigation3)
         }
 
         commonTest.dependencies {

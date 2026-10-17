@@ -4,10 +4,7 @@ import androidx.navigation3.runtime.NavMetadataKey
 import androidx.navigation3.runtime.metadata
 
 /**
- * [NavEntry][androidx.navigation3.runtime.NavEntry] / [Scene][androidx.navigation3.scene.Scene]
- * metadata key for the destination’s [GroupId].
- *
- * Attached automatically by [dev.stashy.navigation.compose.toDecoratedEntries].
+ * [NavEntry][androidx.navigation3.runtime.NavEntry] metadata key for the destination’s [GroupId].
  */
 public object GroupIdKey : NavMetadataKey<GroupId>
 

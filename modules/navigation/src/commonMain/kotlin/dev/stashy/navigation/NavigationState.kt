@@ -13,7 +13,8 @@ import androidx.navigation3.runtime.NavBackStack
  * “exit through home” pattern: the start group is always present, plus at most one other
  * current group.
  *
- * @param startRoute the start destination (uses [NavDestination.group], typically [GroupId.Default])
+ * @param startRoute the start destination; when it is a [NavDestination.Group] its group is used,
+ * otherwise [GroupId.Default]
  * @param currentGroup the state object that backs the active group
  * @param backStacks per-group back stacks (start group is initialized with [startRoute])
  */
@@ -21,12 +22,12 @@ public class NavigationState(
     public val startRoute: NavDestination,
     public val backStacks: SnapshotStateMap<GroupId, NavBackStack<NavDestination>> =
         mutableStateMapOf<GroupId, NavBackStack<NavDestination>>().also { map ->
-            map[startRoute.group] = NavBackStack(startRoute)
+            map[startRoute.startGroup()] = NavBackStack(startRoute)
         },
 ) {
-    public var currentGroup: GroupId by mutableStateOf(startRoute.group)
+    public var currentGroup: GroupId by mutableStateOf(startRoute.startGroup())
 
-    public val startGroup: GroupId = startRoute.group
+    public val startGroup: GroupId = startRoute.startGroup()
 
     /**
      * Groups whose stacks should be shown. The start group is always first; when another group
@@ -53,6 +54,12 @@ public class NavigationState(
     public val current: NavDestination
         get() = entriesSnapshot.lastOrNull() ?: startRoute
 }
+
+/**
+ * Group of [startRoute] when it is a [NavDestination.Group], otherwise [GroupId.Default].
+ */
+internal fun NavDestination.startGroup(): GroupId =
+    (this as? NavDestination.Group)?.group ?: GroupId.Default
 
 private fun NavBackStack<NavDestination>?.orEmpty(): List<NavDestination> =
     this?.toList().orEmpty()

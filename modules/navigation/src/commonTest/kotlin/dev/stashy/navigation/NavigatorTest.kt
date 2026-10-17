@@ -15,9 +15,17 @@ import kotlinx.coroutines.test.runTest
 private val GroupA = GroupId("a")
 private val GroupB = GroupId("b")
 
-private data class TestDestination(
+private data class GroupDestination(
     val name: String,
     override val group: GroupId = GroupId.Default,
+) : NavDestination.Group {
+    @Composable
+    override fun Content() {
+    }
+}
+
+private data class PlainDestination(
+    val name: String,
 ) : NavDestination {
     @Composable
     override fun Content() {
@@ -25,12 +33,14 @@ private data class TestDestination(
 }
 
 class NavigatorTest {
-    private val home = TestDestination("home", GroupA)
-    private val pageA1 = TestDestination("page-a1", GroupA)
-    private val pageA2 = TestDestination("page-a2", GroupA)
-    private val pageB1 = TestDestination("page-b1", GroupB)
-    private val pageBRoot = TestDestination("b-root", GroupB)
-    private val defaultHome = TestDestination("default-home")
+    private val home = GroupDestination("home", GroupA)
+    private val pageA1 = GroupDestination("page-a1", GroupA)
+    private val pageA2 = GroupDestination("page-a2", GroupA)
+    private val pageB1 = GroupDestination("page-b1", GroupB)
+    private val pageBRoot = GroupDestination("b-root", GroupB)
+    private val defaultHome = GroupDestination("default-home")
+    private val plainHome = PlainDestination("plain-home")
+    private val plainPage = PlainDestination("plain-page")
 
     private fun navigator(): Navigator = Navigator(NavigationState(home))
 
@@ -41,6 +51,16 @@ class NavigatorTest {
         assertEquals(GroupId.Default, nav.state.currentGroup)
         assertEquals(GroupId.Default, nav.state.startGroup)
         assertEquals(listOf(defaultHome), nav.state.entries.toList())
+        assertEquals(listOf(GroupId.Default), nav.state.stacksInUse)
+    }
+
+    @Test
+    fun nonGroupStartRouteUsesDefaultGroup() {
+        val nav = Navigator(NavigationState(plainHome))
+
+        assertEquals(GroupId.Default, nav.state.currentGroup)
+        assertEquals(GroupId.Default, nav.state.startGroup)
+        assertEquals(listOf(plainHome), nav.state.entries.toList())
         assertEquals(listOf(GroupId.Default), nav.state.stacksInUse)
     }
 
@@ -66,6 +86,28 @@ class NavigatorTest {
     }
 
     @Test
+    fun navigateNonGroupPushesOntoCurrentStack() {
+        val nav = navigator()
+        nav.navigate(pageA1)
+        nav.navigate(plainPage)
+
+        assertEquals(GroupA, nav.state.currentGroup)
+        assertEquals(listOf(home, pageA1, plainPage), nav.state.entries.toList())
+        assertEquals(plainPage, nav.state.current)
+    }
+
+    @Test
+    fun navigateNonGroupUsesActiveGroupStack() {
+        val nav = navigator()
+        nav.navigate(pageB1)
+        nav.navigate(plainPage)
+
+        assertEquals(GroupB, nav.state.currentGroup)
+        assertEquals(listOf(pageB1, plainPage), nav.state.backStacks.getValue(GroupB).toList())
+        assertEquals(listOf(home, pageB1, plainPage), nav.state.entries.toList())
+    }
+
+    @Test
     fun navigateToNewGroupUsesExitThroughHomeEntries() {
         val nav = navigator()
         nav.navigate(pageA1)
@@ -82,7 +124,7 @@ class NavigatorTest {
     @Test
     fun navigateAThenBThenCKeepsOnlyStartAndCurrentInUse() {
         val nav = navigator()
-        val pageC1 = TestDestination("page-c1", GroupId("c"))
+        val pageC1 = GroupDestination("page-c1", GroupId("c"))
 
         nav.navigate(pageA1)
         nav.navigate(pageB1)
@@ -120,6 +162,16 @@ class NavigatorTest {
     }
 
     @Test
+    fun goBackPopsNonGroupEntry() {
+        val nav = navigator()
+        nav.navigate(plainPage)
+        nav.goBack()
+
+        assertEquals(listOf(home), nav.state.entries.toList())
+        assertEquals(GroupA, nav.state.currentGroup)
+    }
+
+    @Test
     fun goBackAtNonStartGroupRootReturnsToStart() {
         val nav = navigator()
         nav.navigate(pageB1)
@@ -146,6 +198,16 @@ class NavigatorTest {
 
         assertEquals(GroupA, nav.state.currentGroup)
         assertEquals(listOf(home, pageA1), nav.state.entries.toList())
+    }
+
+    @Test
+    fun popToOrNavigateNonGroupPushesOntoCurrentStack() {
+        val nav = navigator()
+        nav.navigate(pageB1)
+        nav.popToOrNavigate(plainPage)
+
+        assertEquals(GroupB, nav.state.currentGroup)
+        assertEquals(listOf(pageB1, plainPage), nav.state.backStacks.getValue(GroupB).toList())
     }
 
     @Test
@@ -182,6 +244,18 @@ class NavigatorTest {
     }
 
     @Test
+    fun popToOrNavigateToNonGroupStartRestoresStartGroup() {
+        val nav = Navigator(NavigationState(plainHome))
+        nav.navigate(pageB1)
+        nav.navigate(plainPage)
+        nav.popToOrNavigate(plainHome)
+
+        assertEquals(GroupId.Default, nav.state.currentGroup)
+        assertEquals(listOf(plainHome), nav.state.entries.toList())
+        assertEquals(listOf(pageB1, plainPage), nav.state.backStacks.getValue(GroupB).toList())
+    }
+
+    @Test
     fun entriesIsStableWhenStateUnchanged() {
         val nav = navigator()
         nav.navigate(pageA1)
@@ -210,12 +284,12 @@ class NavigatorTest {
     @Test
     fun entriesViewTracksSnapshotChanges() = runTest {
         val nav = navigator()
-        val emissions = mutableListOf<List<TestDestination>>()
+        val emissions = mutableListOf<List<NavDestination>>()
 
         val job =
             launch(UnconfinedTestDispatcher(testScheduler)) {
                 snapshotFlow { nav.state.entries.toList() }
-                    .collect { emissions.add(it.map { dest -> dest as TestDestination }) }
+                    .collect { emissions.add(it) }
             }
 
         Snapshot.withMutableSnapshot {

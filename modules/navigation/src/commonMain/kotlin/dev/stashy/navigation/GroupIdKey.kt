@@ -12,8 +12,16 @@ import androidx.navigation3.runtime.metadata
 public object GroupIdKey : NavMetadataKey<GroupId>
 
 /**
- * Metadata map containing only [GroupIdKey] → [NavDestination.group].
+ * Metadata map containing [GroupIdKey] → [group].
  */
-public fun NavDestination.groupMetadata(): Map<String, Any> = metadata {
+public fun groupMetadata(group: GroupId): Map<String, Any> = metadata {
     put(GroupIdKey, group)
+}
+
+/**
+ * Metadata map containing [GroupIdKey] when this destination is a [NavDestination.Group].
+ */
+public fun NavDestination.groupMetadata(): Map<String, Any> {
+    val group = (this as? NavDestination.Group)?.group ?: return emptyMap()
+    return groupMetadata(group)
 }

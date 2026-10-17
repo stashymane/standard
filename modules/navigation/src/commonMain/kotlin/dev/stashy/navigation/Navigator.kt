@@ -14,22 +14,27 @@ public class Navigator(
         field = MutableSharedFlow<GroupId>(extraBufferCapacity = 1)
 
     /**
-     * Navigates to [route], switching groups when [NavDestination.group] differs from the current
-     * group. Navigating to a group’s existing root only switches the active group (recipe top-level
-     * behavior).
+     * Navigates to [route].
+     *
+     * - [NavDestination.Group] destinations switch to that group when it differs from the current
+     *   group. Navigating to a group’s existing root only switches the active group.
+     * - Non-group destinations are pushed onto the current group’s back stack.
      */
     public fun navigate(route: NavDestination) {
-        val targetGroup = route.group
+        val targetGroup = resolveGroupFor(route)
         val stack = prepareStack(targetGroup)
-        state.currentGroup = targetGroup
+
+        if (route is NavDestination.Group) {
+            state.currentGroup = targetGroup
+
+            // Group root: switch to this group and keep its existing stack.
+            if (stack.isNotEmpty() && stack.first() == route) {
+                return
+            }
+        }
 
         if (stack.isEmpty()) {
             stack.add(route)
-            return
-        }
-
-        // Group root: switch to this group and keep its existing stack.
-        if (stack.first() == route) {
             return
         }
 
@@ -59,15 +64,15 @@ public class Navigator(
     }
 
     /**
-     * Browser-history style sync: switch to [route]’s group, pop back to [route] if it is already
-     * on that stack, otherwise push it.
+     * Browser-history style sync: switch to [route]’s group (or the current group for non-group
+     * routes), pop back to [route] if it is already on that stack, otherwise push it.
+     *
+     * The start route always restores the start group and truncates that stack.
      */
     public fun popToOrNavigate(route: NavDestination) {
-        val targetGroup = resolveGroupFor(route)
-        val stack = prepareStack(targetGroup)
-        state.currentGroup = targetGroup
-
-        if (route == state.startRoute && targetGroup == state.startGroup) {
+        if (route == state.startRoute) {
+            val stack = prepareStack(state.startGroup)
+            state.currentGroup = state.startGroup
             while (stack.size > 1) {
                 stack.removeLastOrNull()
             }
@@ -78,6 +83,13 @@ public class Navigator(
                 stack.add(state.startRoute)
             }
             return
+        }
+
+        val targetGroup = resolveGroupFor(route)
+        val stack = prepareStack(targetGroup)
+
+        if (route is NavDestination.Group) {
+            state.currentGroup = targetGroup
         }
 
         if (stack.lastOrNull() == route) return
@@ -92,7 +104,11 @@ public class Navigator(
         }
     }
 
-    private fun resolveGroupFor(route: NavDestination): GroupId = route.group
+    /**
+     * Group destinations use their [NavDestination.Group.group]; others use the current group.
+     */
+    private fun resolveGroupFor(route: NavDestination): GroupId =
+        (route as? NavDestination.Group)?.group ?: state.currentGroup
 
     private fun prepareStack(group: GroupId): NavBackStack<NavDestination> =
         state.backStacks.getOrPut(group) { NavBackStack() }

@@ -14,6 +14,9 @@ NavDisplay(
         rememberSaveableStateHolderNavEntryDecorator(),
         rememberViewModelStoreNavEntryDecorator(),
     ),
+    sceneDecoratorStrategies = listOf(
+        rememberNavigatorSceneDecorator(navigator),
+    ),
     entryProvider = state::toEntry,
     onBack = navigator::goBack,
     transitionSpec = transitions.transitionSpec,

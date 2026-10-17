@@ -8,24 +8,24 @@ A module for Jetpack Navigation 3 with multiple group back stacks and web URL sy
 val state = rememberNavigationState(startRoute = Home)
 val navigator = remember { Navigator(state) }
 
-CompositionLocalProvider(LocalNavigator provides navigator) {
-    SyncBrowserHistory(
-        navigator = navigator,
-        pathOf = { /* ... */ },
-        parsePath = { /* ... */ },
-    )
+SyncBrowserHistory(
+    navigator = navigator,
+    pathOf = { /* ... */ },
+    parsePath = { /* ... */ },
+)
 
-    // NavDisplay comes from navigation3-ui (app dependency)
-    NavDisplay(
-        backStack = state.entries,
-        entryDecorators = listOf(
-            rememberSaveableStateHolderNavEntryDecorator(),
-            rememberViewModelStoreNavEntryDecorator(),
-        ),
-        entryProvider = state::toEntry,
-        onBack = { navigator.goBack() },
-    )
-}
+NavDisplay(
+    backStack = state.entries,
+    entryDecorators = listOf(
+        rememberSaveableStateHolderNavEntryDecorator(),
+        rememberViewModelStoreNavEntryDecorator(),
+    ),
+    sceneDecoratorStrategies = listOf(
+        rememberNavigatorSceneDecorator(navigator), // provided within navigation-ui module
+    ),
+    entryProvider = state::toEntry,
+    onBack = { navigator.goBack() },
+)
 ```
 
 Destinations:

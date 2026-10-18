@@ -3,6 +3,7 @@ package dev.stashy.navigation
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.navigation3.runtime.NavBackStack
+import dev.stashy.navigation.util.StableSnapshotListView
 
 /**
  * State holder for multi-group navigation.

@@ -1,10 +1,11 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
+import dev.stashy.navigation.Navigator
 
 /**
- * The local [Navigator] used within a `NavDisplay`.
+ * The local [dev.stashy.navigation.Navigator] used within a `NavDisplay`.
  *
  * Provided by `rememberNavigatorSceneDecorator` within the `navigation-ui` module.
  */

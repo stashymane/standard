@@ -1,4 +1,4 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.util
 
 /**
  * Provides a stable view over a list, including derived state lists.

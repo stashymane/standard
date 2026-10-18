@@ -5,8 +5,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.scene.SceneDecoratorStrategy
-import dev.stashy.navigation.LocalNavigator
 import dev.stashy.navigation.Navigator
+import dev.stashy.navigation.compose.LocalNavigator
 
 @Composable
 public fun <T : Any> rememberNavigatorSceneDecorator(

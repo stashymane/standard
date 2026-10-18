@@ -3,9 +3,13 @@
 UI utilities for Navigation3.
 
 ```kotlin
-val order = listOf(Projects.group, Media.group, About.group)
+val graph = navGraph<NavKey> {
+    group { entry<Home> { } }
+    group { entry<Search> { } }
+}
+// Peer indices follow DSL declaration order (0, 1, …) within each peer set.
 val transitions = NavTransitions(
-    compareGroups = { from, to -> order.indexOf(from).compareTo(order.indexOf(to)) },
+    comparePeerIndex = { from, to -> from.compareTo(to) },
 )
 
 NavDisplay(
@@ -17,7 +21,7 @@ NavDisplay(
     sceneDecoratorStrategies = listOf(
         rememberNavigatorSceneDecorator(navigator),
     ),
-    entryProvider = state::toEntry,
+    entryProvider = graph.entryProvider,
     onBack = navigator::goBack,
     transitionSpec = transitions.transitionSpec,
     popTransitionSpec = transitions.popTransitionSpec,

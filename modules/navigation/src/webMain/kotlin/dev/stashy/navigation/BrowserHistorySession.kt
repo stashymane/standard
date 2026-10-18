@@ -1,6 +1,7 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.snapshotFlow
+import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.resources.normalizeResourceLocation
 import kotlinx.browser.window
 import kotlinx.coroutines.FlowPreview
@@ -9,11 +10,11 @@ import org.w3c.dom.events.Event
 import kotlin.time.Duration.Companion.milliseconds
 
 internal class BrowserHistorySession(
-    private val backStack: List<NavDestination>,
+    private val backStack: List<NavKey>,
     private val entryStateStore: EntryStateStore,
-    private val pathOf: (NavDestination) -> String,
-    private val parsePath: (String) -> NavDestination,
-    private val applyEntry: (NavDestination) -> Unit,
+    private val pathOf: (NavKey) -> String,
+    private val parsePath: (String) -> NavKey,
+    private val applyEntry: (NavKey) -> Unit,
 ) {
     internal companion object {
         internal const val HISTORY_DEBOUNCE_MS: Long = 200L
@@ -61,7 +62,7 @@ internal class BrowserHistorySession(
             .collect { stack -> syncStackToHistory(stack) }
     }
 
-    private fun syncStackToHistory(stack: List<NavDestination>) {
+    private fun syncStackToHistory(stack: List<NavKey>) {
         val path = pathOf(stack.last())
         val locationPath = currentLocation()
 

@@ -1,12 +1,27 @@
 # navigation
 
-A module for Jetpack Navigation 3 with multiple group back stacks and web URL sync.
-
 ## Usage
 
 ```kotlin
-val state = rememberNavigationState(startRoute = Home)
-val navigator = remember { Navigator(state) }
+val graph = navGraph<NavKey> {
+    group {
+        entry<Home> { HomeScreen() }
+        entry<HomeDetail> { key -> HomeDetailScreen(key) }
+    }
+    group {
+        entry<Search> { SearchScreen() }
+    }
+    group {
+        entry<Profile> { ProfileScreen() }
+        group {
+            entry<Posts> { PostsScreen() }
+            entry<PostDetail> { key -> PostDetailScreen(key) }
+        }
+    }
+}
+
+val state = rememberNavigationState(startRoute = Home, graph = graph)
+val navigator = remember { Navigator(state, graph) }
 
 // Compose before NavDisplay so entry state can hydrate from `history.state` on web.
 SyncBrowserHistory(
@@ -25,21 +40,7 @@ NavDisplay(
     sceneDecoratorStrategies = listOf(
         rememberNavigatorSceneDecorator(navigator), // provided within navigation-ui module
     ),
-    entryProvider = state::toEntry,
+    entryProvider = graph.entryProvider,
     onBack = { navigator.goBack() },
 )
-```
-
-Destinations:
-
-```kotlin
-@Serializable
-data object Home : NavDestination {
-    @Composable
-    override fun Content() {
-        val navigator = LocalNavigator.current
-        var query by rememberNavEntryState() { "" } // saves state to the navigation entry
-        HomeScreen(query = query, onQueryChange = { query = it }, onOpen = { navigator.navigate(Details) })
-    }
-}
 ```

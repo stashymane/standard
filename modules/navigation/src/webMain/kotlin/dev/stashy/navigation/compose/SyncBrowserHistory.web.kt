@@ -1,8 +1,8 @@
 package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.*
+import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.BrowserHistorySession
-import dev.stashy.navigation.NavDestination
 import dev.stashy.navigation.NavigationState
 import dev.stashy.navigation.hydrateEntryStatesFromHistory
 import kotlinx.coroutines.coroutineScope
@@ -11,9 +11,9 @@ import kotlinx.coroutines.launch
 @Composable
 public actual fun SyncBrowserHistory(
     state: NavigationState,
-    pathOf: (NavDestination) -> String,
-    parsePath: (String) -> NavDestination,
-    applyEntry: (NavDestination) -> Unit,
+    pathOf: (NavKey) -> String,
+    parsePath: (String) -> NavKey,
+    applyEntry: (NavKey) -> Unit,
 ) {
     val pathOfState by rememberUpdatedState(pathOf)
     val parsePathState by rememberUpdatedState(parsePath)

@@ -2,23 +2,23 @@ package dev.stashy.navigation.ui
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.get
 import androidx.navigation3.scene.Scene
 import androidx.navigationevent.NavigationEvent.SwipeEdge
-import dev.stashy.navigation.GroupId
-import dev.stashy.navigation.GroupIdKey
-import dev.stashy.navigation.NavDestination
+import dev.stashy.navigation.GroupPeerIndexKey
+import dev.stashy.navigation.GroupPeerSetKey
 
-private typealias NavTransitionScope = AnimatedContentTransitionScope<Scene<NavDestination>>
+private typealias NavTransitionScope = AnimatedContentTransitionScope<Scene<NavKey>>
 private typealias TransitionSpecProvider = NavTransitionScope.() -> ContentTransform
 private typealias PredictiveTransitionSpecProvider = NavTransitionScope.(@SwipeEdge Int) -> ContentTransform
 
 /**
- * @param compareGroups compares two groups by their [GroupId].
- * Semantically the same as [Comparable.compareTo].
+ * @param comparePeerIndex compares sibling peer indices (semantically [Comparable.compareTo]).
+ * Default is natural order (DSL declaration order within a peer set).
  */
 public class NavTransitions(
-    public val compareGroups: (from: GroupId, to: GroupId) -> Int = { _, _ -> 0 },
+    public val comparePeerIndex: (from: Int, to: Int) -> Int = Int::compareTo,
     public val groupRight: ContentTransform = NavGroupRight,
     public val groupLeft: ContentTransform = NavGroupLeft,
 ) {
@@ -55,13 +55,13 @@ public class NavTransitions(
     }
 
     private fun NavTransitionScope.currentGroupDirection(): Int {
-        val initial = initialState.metadata[GroupIdKey]
-        val target = targetState.metadata[GroupIdKey]
-        return groupDirection(initial, target)
-    }
+        val initialSet = initialState.metadata[GroupPeerSetKey]
+        val targetSet = targetState.metadata[GroupPeerSetKey]
+        if (initialSet == null || targetSet == null || initialSet != targetSet) return 0
 
-    private fun groupDirection(initial: GroupId?, target: GroupId?): Int {
-        if (initial == null || target == null || initial == target) return 0
-        return compareGroups(initial, target)
+        val initialIndex = initialState.metadata[GroupPeerIndexKey] ?: return 0
+        val targetIndex = targetState.metadata[GroupPeerIndexKey] ?: return 0
+        if (initialIndex == targetIndex) return 0
+        return comparePeerIndex(initialIndex, targetIndex)
     }
 }

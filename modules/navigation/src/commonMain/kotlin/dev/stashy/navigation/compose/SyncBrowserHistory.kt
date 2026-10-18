@@ -1,7 +1,7 @@
 package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
-import dev.stashy.navigation.NavDestination
+import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.NavigationState
 import dev.stashy.navigation.Navigator
 import dev.stashy.navigation.resources.defaultResourcesFormat
@@ -18,31 +18,31 @@ import kotlinx.serialization.serializer
  * @param state navigation state whose [NavigationState.entries] are observed
  * @param pathOf maps a destination to its URL location (Ktor [io.ktor.http.Url.fullPath], path + query)
  * @param parsePath maps a URL location to a destination
- * @param applyEntry applies [parsePath] results (typically [Navigator.popToOrNavigate])
+ * @param applyEntry applies [parsePath] results (typically `popTo(route) ?: navigate(route)`)
  */
 @Composable
 public expect fun SyncBrowserHistory(
     state: NavigationState,
-    pathOf: (NavDestination) -> String,
-    parsePath: (String) -> NavDestination,
-    applyEntry: (NavDestination) -> Unit,
+    pathOf: (NavKey) -> String,
+    parsePath: (String) -> NavKey,
+    applyEntry: (NavKey) -> Unit,
 )
 
 /**
  * Keeps [navigator]'s [NavigationState.entries] in sync with the browser History API,
- * applying URL changes via [Navigator.popToOrNavigate].
+ * applying URL changes via `popTo(route) ?: navigate(route)`.
  */
 @Composable
 public fun SyncBrowserHistory(
     navigator: Navigator,
-    pathOf: (NavDestination) -> String,
-    parsePath: (String) -> NavDestination,
+    pathOf: (NavKey) -> String,
+    parsePath: (String) -> NavKey,
 ) {
     SyncBrowserHistory(
         state = navigator.state,
         pathOf = pathOf,
         parsePath = parsePath,
-        applyEntry = navigator::popToOrNavigate,
+        applyEntry = { route -> navigator.popTo(route) ?: navigator.navigate(route) },
     )
 }
 
@@ -56,7 +56,7 @@ public fun SyncBrowserHistory(
  * the URL is corrected to match that entry.
  */
 @Composable
-public inline fun <reified Entry : NavDestination> SyncBrowserHistory(
+public inline fun <reified Entry : NavKey> SyncBrowserHistory(
     state: NavigationState,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
     noinline applyEntry: (Entry) -> Unit,
@@ -80,13 +80,13 @@ public inline fun <reified Entry : NavDestination> SyncBrowserHistory(
  * Resource-based browser sync for a [Navigator].
  */
 @Composable
-public inline fun <reified Entry : NavDestination> SyncBrowserHistory(
+public inline fun <reified Entry : NavKey> SyncBrowserHistory(
     navigator: Navigator,
     resourcesFormat: ResourcesFormat = defaultResourcesFormat,
 ) {
     SyncBrowserHistory<Entry>(
         state = navigator.state,
         resourcesFormat = resourcesFormat,
-        applyEntry = { entry -> navigator.popToOrNavigate(entry) },
+        applyEntry = { entry -> navigator.popTo(entry) ?: navigator.navigate(entry) },
     )
 }

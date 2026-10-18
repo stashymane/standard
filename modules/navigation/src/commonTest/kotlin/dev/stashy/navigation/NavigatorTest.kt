@@ -1,10 +1,11 @@
 package dev.stashy.navigation
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.navigation3.runtime.NavKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -12,253 +13,278 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 
-private val GroupA = GroupId("a")
-private val GroupB = GroupId("b")
-
-private data class GroupDestination(
-    val name: String,
-    override val group: GroupId = GroupId.Default,
-) : NavDestination.Group {
-    @Composable
-    override fun Content() {
-    }
-}
-
-private data class PlainDestination(
-    val name: String,
-) : NavDestination {
-    @Composable
-    override fun Content() {
-    }
-}
+private data object Home : NavKey
+private data object HomeDetail : NavKey
+private data object Search : NavKey
+private data object SearchResult : NavKey
+private data object Profile : NavKey
+private data object Posts : NavKey
+private data class PostDetail(val id: Int) : NavKey
+private data object Liked : NavKey
 
 class NavigatorTest {
-    private val home = GroupDestination("home", GroupA)
-    private val pageA1 = GroupDestination("page-a1", GroupA)
-    private val pageA2 = GroupDestination("page-a2", GroupA)
-    private val pageB1 = GroupDestination("page-b1", GroupB)
-    private val pageBRoot = GroupDestination("b-root", GroupB)
-    private val defaultHome = GroupDestination("default-home")
-    private val plainHome = PlainDestination("plain-home")
-    private val plainPage = PlainDestination("plain-page")
-
-    private fun navigator(): Navigator = Navigator(NavigationState(home))
-
-    @Test
-    fun defaultGroupUsedWhenDestinationOmitsGroup() {
-        val nav = Navigator(NavigationState(defaultHome))
-
-        assertEquals(GroupId.Default, nav.state.currentGroup)
-        assertEquals(GroupId.Default, nav.state.startGroup)
-        assertEquals(listOf(defaultHome), nav.state.entries.toList())
-        assertEquals(listOf(GroupId.Default), nav.state.stacksInUse)
+    private val graph = navGraph<NavKey> {
+        group {
+            entry<Home> { }
+            entry<HomeDetail> { }
+        }
+        group {
+            entry<Search> { }
+            entry<SearchResult> { }
+        }
+        group {
+            entry<Profile> { }
+            group {
+                entry<Posts> { }
+                entry<PostDetail> { }
+            }
+            group {
+                entry<Liked> { }
+            }
+        }
     }
 
-    @Test
-    fun nonGroupStartRouteUsesDefaultGroup() {
-        val nav = Navigator(NavigationState(plainHome))
+    private val homeGroup get() = graph.groupOf(Home)
+    private val searchGroup get() = graph.groupOf(Search)
+    private val profileGroup get() = graph.groupOf(Profile)
+    private val postsGroup get() = graph.groupOf(Posts)
+    private val likedGroup get() = graph.groupOf(Liked)
 
-        assertEquals(GroupId.Default, nav.state.currentGroup)
-        assertEquals(GroupId.Default, nav.state.startGroup)
-        assertEquals(listOf(plainHome), nav.state.entries.toList())
-        assertEquals(listOf(GroupId.Default), nav.state.stacksInUse)
-    }
+    private fun navigator(): Navigator =
+        Navigator(NavigationState(Home, graph), graph)
 
     @Test
     fun rootEntriesShowStartRouteOnly() {
         val nav = navigator()
 
-        assertEquals(listOf(home), nav.state.entries.toList())
-        assertEquals(home, nav.state.current)
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(listOf(GroupA), nav.state.stacksInUse)
+        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(Home, nav.state.current)
+        assertEquals(homeGroup, nav.state.currentGroup)
+        assertEquals(listOf(homeGroup), nav.state.activePath)
     }
 
     @Test
     fun navigatePushesWithinSameGroup() {
         val nav = navigator()
 
-        nav.navigate(pageA1)
+        nav.navigate(HomeDetail)
 
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(pageA1, nav.state.current)
-        assertEquals(listOf(home, pageA1), nav.state.entries.toList())
+        assertEquals(homeGroup, nav.state.currentGroup)
+        assertEquals(HomeDetail, nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.entries.toList())
     }
 
     @Test
-    fun navigateNonGroupPushesOntoCurrentStack() {
+    fun siblingSwitchRetainsOffScreenStack() {
         val nav = navigator()
-        nav.navigate(pageA1)
-        nav.navigate(plainPage)
+        nav.navigate(HomeDetail)
+        nav.navigate(Search)
 
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(listOf(home, pageA1, plainPage), nav.state.entries.toList())
-        assertEquals(plainPage, nav.state.current)
+        assertEquals(searchGroup, nav.state.currentGroup)
+        assertEquals(listOf(Search), nav.state.entries.toList())
+        assertEquals(listOf(searchGroup), nav.state.activePath)
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(homeGroup).toList())
     }
 
     @Test
-    fun navigateNonGroupUsesActiveGroupStack() {
+    fun siblingSwitchAmongThreeRetainsMiddle() {
         val nav = navigator()
-        nav.navigate(pageB1)
-        nav.navigate(plainPage)
+        nav.navigate(HomeDetail)
+        nav.navigate(Search)
+        nav.navigate(SearchResult)
+        nav.navigate(Profile)
 
-        assertEquals(GroupB, nav.state.currentGroup)
-        assertEquals(listOf(pageB1, plainPage), nav.state.backStacks.getValue(GroupB).toList())
-        assertEquals(listOf(home, pageB1, plainPage), nav.state.entries.toList())
-    }
-
-    @Test
-    fun navigateToNewGroupUsesExitThroughHomeEntries() {
-        val nav = navigator()
-        nav.navigate(pageA1)
-        nav.navigate(pageB1)
-
-        assertEquals(GroupB, nav.state.currentGroup)
-        assertEquals(pageB1, nav.state.current)
-        // start stack + current group stack (not full visit history)
-        assertEquals(listOf(home, pageA1, pageB1), nav.state.entries.toList())
-        assertEquals(listOf(GroupA, GroupB), nav.state.stacksInUse)
-        assertTrue(GroupB in nav.state.backStacks)
-    }
-
-    @Test
-    fun navigateAThenBThenCKeepsOnlyStartAndCurrentInUse() {
-        val nav = navigator()
-        val pageC1 = GroupDestination("page-c1", GroupId("c"))
-
-        nav.navigate(pageA1)
-        nav.navigate(pageB1)
-        nav.navigate(pageC1)
-
-        assertEquals(listOf(GroupA, GroupId("c")), nav.state.stacksInUse)
-        assertEquals(listOf(home, pageA1, pageC1), nav.state.entries.toList())
-        // B stack retained off-screen
-        assertEquals(listOf(pageB1), nav.state.backStacks.getValue(GroupB).toList())
+        assertEquals(listOf(profileGroup), nav.state.activePath)
+        assertEquals(listOf(Profile), nav.state.entries.toList())
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(homeGroup).toList())
+        assertEquals(listOf(Search, SearchResult), nav.state.backStacks.getValue(searchGroup).toList())
     }
 
     @Test
     fun navigateToGroupRootOnlySwitchesGroup() {
         val nav = navigator()
-        nav.navigate(pageBRoot)
-        nav.navigate(pageB1)
-        nav.navigate(home)
-        nav.navigate(pageBRoot)
+        nav.navigate(Search)
+        nav.navigate(SearchResult)
+        nav.navigate(Home)
+        nav.navigate(Search)
 
-        assertEquals(GroupB, nav.state.currentGroup)
-        assertEquals(listOf(pageBRoot, pageB1), nav.state.backStacks.getValue(GroupB).toList())
-        assertEquals(pageB1, nav.state.current)
-        assertEquals(listOf(home, pageBRoot, pageB1), nav.state.entries.toList())
+        assertEquals(searchGroup, nav.state.currentGroup)
+        assertEquals(listOf(Search, SearchResult), nav.state.backStacks.getValue(searchGroup).toList())
+        assertEquals(SearchResult, nav.state.current)
+        assertEquals(listOf(Search, SearchResult), nav.state.entries.toList())
     }
 
     @Test
     fun goBackPopsWithinGroup() {
         val nav = navigator()
-        nav.navigate(pageA1)
-        nav.navigate(pageA2)
+        nav.navigate(HomeDetail)
+        assertTrue(nav.canGoBack())
         nav.goBack()
 
-        assertEquals(listOf(home, pageA1), nav.state.entries.toList())
-        assertEquals(pageA1, nav.state.current)
+        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(Home, nav.state.current)
+        assertFalse(nav.canGoBack())
     }
 
     @Test
-    fun goBackPopsNonGroupEntry() {
+    fun goBackAtNonStartRootPeerReturnsToStartAndRetains() {
         val nav = navigator()
-        nav.navigate(plainPage)
+        nav.navigate(Search)
+        assertTrue(nav.canGoBack())
         nav.goBack()
 
-        assertEquals(listOf(home), nav.state.entries.toList())
-        assertEquals(GroupA, nav.state.currentGroup)
-    }
-
-    @Test
-    fun goBackAtNonStartGroupRootReturnsToStart() {
-        val nav = navigator()
-        nav.navigate(pageB1)
-        nav.goBack()
-
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(listOf(home), nav.state.entries.toList())
-        assertEquals(listOf(pageB1), nav.state.backStacks.getValue(GroupB).toList())
+        assertEquals(homeGroup, nav.state.currentGroup)
+        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(searchGroup).toList())
+        assertFalse(nav.canGoBack())
     }
 
     @Test
     fun goBackAtStartRootIsNoOp() {
         val nav = navigator()
+        assertFalse(nav.canGoBack())
         nav.goBack()
 
-        assertEquals(listOf(home), nav.state.entries.toList())
+        assertEquals(listOf(Home), nav.state.entries.toList())
     }
 
     @Test
-    fun popToOrNavigatePushesWithinSameGroup() {
+    fun canGoBackTrueForNestedGroupRoot() {
+        val nav = navigator()
+        nav.navigate(Profile)
+        nav.navigate(Posts)
+        assertTrue(nav.canGoBack())
+    }
+
+    @Test
+    fun nestedNavigateAppendsToActivePath() {
+        val nav = navigator()
+        nav.navigate(Profile)
+        nav.navigate(Posts)
+
+        assertEquals(listOf(profileGroup, postsGroup), nav.state.activePath)
+        assertEquals(listOf(Profile, Posts), nav.state.entries.toList())
+    }
+
+    @Test
+    fun nestedSiblingSwitchRetainsOffScreenNestedStack() {
+        val nav = navigator()
+        nav.navigate(Profile)
+        nav.navigate(Posts)
+        nav.navigate(PostDetail(1))
+        nav.navigate(Liked)
+
+        assertEquals(listOf(profileGroup, likedGroup), nav.state.activePath)
+        assertEquals(listOf(Profile, Liked), nav.state.entries.toList())
+        assertEquals(
+            listOf(Posts, PostDetail(1)),
+            nav.state.backStacks.getValue(postsGroup).toList(),
+        )
+    }
+
+    @Test
+    fun backAtNestedGroupRootClearsNestedStack() {
+        val nav = navigator()
+        nav.navigate(Profile)
+        nav.navigate(Posts)
+        nav.navigate(PostDetail(1))
+        nav.goBack() // PostDetail -> Posts
+        nav.goBack() // clear Posts group, back to Profile only
+
+        assertEquals(listOf(profileGroup), nav.state.activePath)
+        assertEquals(listOf(Profile), nav.state.entries.toList())
+        assertFalse(postsGroup in nav.state.backStacks)
+    }
+
+    @Test
+    fun parentSiblingSwitchRetainsNestedStacks() {
+        val nav = navigator()
+        nav.navigate(Profile)
+        nav.navigate(Posts)
+        nav.navigate(PostDetail(1))
+        nav.navigate(Home)
+
+        assertEquals(listOf(homeGroup), nav.state.activePath)
+        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(listOf(Profile), nav.state.backStacks.getValue(profileGroup).toList())
+        assertEquals(
+            listOf(Posts, PostDetail(1)),
+            nav.state.backStacks.getValue(postsGroup).toList(),
+        )
+
+        nav.navigate(Profile)
+        assertEquals(listOf(profileGroup), nav.state.activePath)
+        assertEquals(listOf(Profile), nav.state.entries.toList())
+        assertEquals(
+            listOf(Posts, PostDetail(1)),
+            nav.state.backStacks.getValue(postsGroup).toList(),
+        )
+
+        nav.navigate(Posts)
+        assertEquals(listOf(profileGroup, postsGroup), nav.state.activePath)
+        assertEquals(listOf(Profile, Posts, PostDetail(1)), nav.state.entries.toList())
+    }
+
+    @Test
+    fun popToReturnsNullWhenRouteNotOnStack() {
         val nav = navigator()
 
-        nav.popToOrNavigate(pageA1)
-
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(listOf(home, pageA1), nav.state.entries.toList())
+        assertEquals(null, nav.popTo(HomeDetail))
+        assertEquals(listOf(Home), nav.state.entries.toList())
     }
 
     @Test
-    fun popToOrNavigateNonGroupPushesOntoCurrentStack() {
+    fun popToOrNavigatePushesWhenMissing() {
         val nav = navigator()
-        nav.navigate(pageB1)
-        nav.popToOrNavigate(plainPage)
 
-        assertEquals(GroupB, nav.state.currentGroup)
-        assertEquals(listOf(pageB1, plainPage), nav.state.backStacks.getValue(GroupB).toList())
+        nav.popTo(HomeDetail) ?: nav.navigate(HomeDetail)
+
+        assertEquals(homeGroup, nav.state.currentGroup)
+        assertEquals(listOf(Home, HomeDetail), nav.state.entries.toList())
     }
 
     @Test
-    fun popToOrNavigatePopsToExistingEntry() {
+    fun popToPopsToExistingEntry() {
         val nav = navigator()
-        nav.popToOrNavigate(pageA1)
-        nav.popToOrNavigate(pageA2)
-        nav.popToOrNavigate(pageA1)
+        nav.navigate(HomeDetail)
+        nav.navigate(Search)
+        assertEquals(Unit, nav.popTo(HomeDetail))
 
-        assertEquals(listOf(home, pageA1), nav.state.entries.toList())
+        assertEquals(listOf(Home, HomeDetail), nav.state.entries.toList())
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(searchGroup).toList())
     }
 
     @Test
-    fun popToOrNavigateAcrossGroupsRestoresStack() {
+    fun popToStartRootTruncatesStartStack() {
         val nav = navigator()
-        nav.popToOrNavigate(pageA1)
-        nav.popToOrNavigate(pageB1)
-        nav.popToOrNavigate(pageA1)
+        nav.navigate(HomeDetail)
+        assertEquals(Unit, nav.popTo(Home))
 
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(listOf(home, pageA1), nav.state.entries.toList())
-        assertEquals(listOf(pageB1), nav.state.backStacks.getValue(GroupB).toList())
+        assertEquals(homeGroup, nav.state.currentGroup)
+        assertEquals(listOf(Home), nav.state.entries.toList())
     }
 
     @Test
-    fun popToOrNavigateToStartRootTruncatesStartStack() {
+    fun popToStartFromNestedRetainsOtherGroups() {
         val nav = navigator()
-        nav.popToOrNavigate(pageA1)
-        nav.popToOrNavigate(pageA2)
-        nav.popToOrNavigate(home)
+        nav.navigate(Profile)
+        nav.navigate(Posts)
+        nav.navigate(PostDetail(1))
+        assertEquals(Unit, nav.popTo(Home))
 
-        assertEquals(GroupA, nav.state.currentGroup)
-        assertEquals(listOf(home), nav.state.entries.toList())
-    }
-
-    @Test
-    fun popToOrNavigateToNonGroupStartRestoresStartGroup() {
-        val nav = Navigator(NavigationState(plainHome))
-        nav.navigate(pageB1)
-        nav.navigate(plainPage)
-        nav.popToOrNavigate(plainHome)
-
-        assertEquals(GroupId.Default, nav.state.currentGroup)
-        assertEquals(listOf(plainHome), nav.state.entries.toList())
-        assertEquals(listOf(pageB1, plainPage), nav.state.backStacks.getValue(GroupB).toList())
+        assertEquals(listOf(homeGroup), nav.state.activePath)
+        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(listOf(Profile), nav.state.backStacks.getValue(profileGroup).toList())
+        assertEquals(
+            listOf(Posts, PostDetail(1)),
+            nav.state.backStacks.getValue(postsGroup).toList(),
+        )
     }
 
     @Test
     fun entriesIsStableWhenStateUnchanged() {
         val nav = navigator()
-        nav.navigate(pageA1)
+        nav.navigate(HomeDetail)
 
         val first = nav.state.entries
         val second = nav.state.entries
@@ -269,22 +295,22 @@ class NavigatorTest {
     @Test
     fun entriesReflectMutationsWithStableInstance() {
         val nav = navigator()
-        nav.navigate(pageA1)
+        nav.navigate(HomeDetail)
         val view = nav.state.entries
 
         Snapshot.withMutableSnapshot {
-            nav.navigate(pageA2)
+            nav.navigate(Search)
         }
 
         assertSame(view, nav.state.entries)
-        assertEquals(listOf(home, pageA1, pageA2), nav.state.entries.toList())
+        assertEquals(listOf(Search), nav.state.entries.toList())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun entriesViewTracksSnapshotChanges() = runTest {
         val nav = navigator()
-        val emissions = mutableListOf<List<NavDestination>>()
+        val emissions = mutableListOf<List<NavKey>>()
 
         val job =
             launch(UnconfinedTestDispatcher(testScheduler)) {
@@ -293,15 +319,15 @@ class NavigatorTest {
             }
 
         Snapshot.withMutableSnapshot {
-            nav.navigate(pageA1)
+            nav.navigate(HomeDetail)
         }
         Snapshot.withMutableSnapshot {
-            nav.navigate(pageA2)
+            nav.navigate(Search)
         }
 
         job.cancel()
 
-        assertTrue(emissions.any { it == listOf(home, pageA1) })
-        assertEquals(listOf(home, pageA1, pageA2), emissions.last())
+        assertTrue(emissions.any { it == listOf(Home, HomeDetail) })
+        assertEquals(listOf(Search), emissions.last())
     }
 }

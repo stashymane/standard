@@ -1,67 +1,83 @@
 package dev.stashy.navigation
 
-import androidx.compose.runtime.*
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.util.StableSnapshotListView
 
 /**
- * State holder for multi-group navigation.
+ * State holder for hierarchical navigation.
  *
- * This class does not modify its own state. It is designed to be modified using [Navigator].
- *
- * Group stacks are created lazily when first targeted. [stacksInUse] follows the
- * “exit through home” pattern: the start group is always present, plus at most one other
- * current group.
- *
- * @param startRoute the start destination; when it is a [NavDestination.Group] its group is used,
- * otherwise [GroupId.Default]
- * @param currentGroup the state object that backs the active group
- * @param backStacks per-group back stacks (start group is initialized with [startRoute])
+ * @param startRoute the start destination key
  */
-public class NavigationState(
-    public val startRoute: NavDestination,
-    public val backStacks: SnapshotStateMap<GroupId, NavBackStack<NavDestination>> =
-        mutableStateMapOf<GroupId, NavBackStack<NavDestination>>().also { map ->
-            map[startRoute.startGroup()] = NavBackStack(startRoute)
-        },
-    public val entryStates: EntryStateStore = EntryStateStore(),
+public class NavigationState private constructor(
+    public val startRoute: NavKey,
+    internal val startGroup: NavGroup,
+    internal val backStacks: SnapshotStateMap<NavGroup, NavBackStack<NavKey>>,
+    public val entryStates: EntryStateStore,
 ) {
-    public var currentGroup: GroupId by mutableStateOf(startRoute.startGroup())
-
-    public val startGroup: GroupId = startRoute.startGroup()
-
     /**
-     * Groups whose stacks should be shown. The start group is always first; when another group
-     * is active it is appended (at most one other group).
+     * Creates state for [startRoute], resolving the start group from [graph].
      */
-    public val stacksInUse: List<GroupId>
-        get() = if (currentGroup == startGroup) {
-            listOf(startGroup)
-        } else {
-            listOf(startGroup, currentGroup)
-        }
+    public constructor(startRoute: NavKey, graph: NavGraph<*>) : this(
+        startRoute = startRoute,
+        startGroup = graph.groupOf(startRoute),
+        entryStates = EntryStateStore(),
+    )
 
-    private val entriesSnapshot: List<NavDestination> by derivedStateOf {
-        stacksInUse.flatMap { groupId ->
-            backStacks[groupId].orEmpty()
+    private constructor(
+        startRoute: NavKey,
+        startGroup: NavGroup,
+        entryStates: EntryStateStore,
+    ) : this(
+        startRoute = startRoute,
+        startGroup = startGroup,
+        backStacks = mutableStateMapOf<NavGroup, NavBackStack<NavKey>>().also { map ->
+            map[startGroup] = NavBackStack(startRoute)
+        },
+        entryStates = entryStates,
+    )
+
+    private val activePathState: SnapshotStateList<NavGroup> =
+        mutableStateListOf(startGroup)
+
+    internal val activePath: List<NavGroup>
+        get() = activePathState.toList()
+
+    internal fun replaceActivePath(path: List<NavGroup>) {
+        activePathState.clear()
+        activePathState.addAll(path)
+    }
+
+    internal fun removeLastActiveGroup() {
+        if (activePathState.isNotEmpty()) {
+            activePathState.removeAt(activePathState.lastIndex)
+        }
+    }
+
+    private val entriesSnapshot: List<NavKey> by derivedStateOf {
+        activePathState.flatMap { group ->
+            backStacks[group].orEmpty()
         }
     }
 
     /**
-     * Flattened destinations for [stacksInUse]. Stable identity for [androidx.compose.runtime.snapshotFlow].
+     * Flattened destinations along the active group path. Stable identity for
+     * [SnapshotFlow][androidx.compose.runtime.snapshotFlow].
      */
-    public val entries: List<NavDestination> = StableSnapshotListView { entriesSnapshot }
+    public val entries: List<NavKey> = StableSnapshotListView { entriesSnapshot }
 
-    public val current: NavDestination
+    public val current: NavKey
         get() = entriesSnapshot.lastOrNull() ?: startRoute
+
+    internal val currentGroup: NavGroup
+        get() = activePathState.lastOrNull() ?: startGroup
 }
 
-/**
- * Group of [startRoute] when it is a [NavDestination.Group], otherwise [GroupId.Default].
- */
-internal fun NavDestination.startGroup(): GroupId =
-    (this as? NavDestination.Group)?.group ?: GroupId.Default
-
-private fun NavBackStack<NavDestination>?.orEmpty(): List<NavDestination> =
+private fun NavBackStack<NavKey>?.orEmpty(): List<NavKey> =
     this?.toList().orEmpty()

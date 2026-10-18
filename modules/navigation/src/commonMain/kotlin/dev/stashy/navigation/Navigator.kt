@@ -1,115 +1,115 @@
 package dev.stashy.navigation
 
 import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
-/**
- * Handles navigation events by updating [NavigationState].
- */
 public class Navigator(
     public val state: NavigationState,
+    public val graph: NavGraph<*>,
 ) {
-    public val reselectEvents: SharedFlow<GroupId>
-        field = MutableSharedFlow<GroupId>(extraBufferCapacity = 1)
+    /**
+     * Emits the reselected route when [onReselect] is called (for example a bottom-nav tap on
+     * the already selected tab).
+     */
+    public val reselectEvents: SharedFlow<NavKey>
+        field = MutableSharedFlow<NavKey>(extraBufferCapacity = 1)
 
     /**
      * Navigates to [route].
-     *
-     * - [NavDestination.Group] destinations switch to that group when it differs from the current
-     *   group. Navigating to a group’s existing root only switches the active group.
-     * - Non-group destinations are pushed onto the current group’s back stack.
      */
-    public fun navigate(route: NavDestination) {
-        val targetGroup = resolveGroupFor(route)
+    public fun navigate(route: NavKey) {
+        val targetGroup = graph.groupOf(route)
+        activateGroup(targetGroup)
         val stack = prepareStack(targetGroup)
 
-        if (route is NavDestination.Group) {
-            state.currentGroup = targetGroup
-
-            // Group root: switch to this group and keep its existing stack.
-            if (stack.isNotEmpty() && stack.first() == route) {
-                return
-            }
+        if (stack.isNotEmpty() && stack.first() == route) {
+            return
         }
-
         if (stack.isEmpty()) {
             stack.add(route)
             return
         }
-
         if (stack.lastOrNull() != route) {
             stack.add(route)
         }
     }
 
     /**
-     * Pops within the current group, or switches back to the start group when at that group’s root
-     * (“exit through home”).
+     * Whether [goBack] would change navigation state.
+     *
+     * True when the current group stack can pop, a nested group can be left, or a non-start root
+     * peer can return to the start group.
      */
+    public fun canGoBack(): Boolean {
+        val leaf = state.currentGroup
+        val stack = state.backStacks[leaf] ?: return false
+        if (stack.size > 1) return true
+        val path = state.activePath
+        return path.size > 1 || leaf != state.startGroup
+    }
+
     public fun goBack() {
-        val stack = state.backStacks[state.currentGroup] ?: return
+        val leaf = state.currentGroup
+        val stack = state.backStacks[leaf] ?: return
         if (stack.size > 1) {
             stack.removeLastOrNull()
-        } else if (state.currentGroup != state.startGroup) {
-            state.currentGroup = state.startGroup
-        }
-    }
-
-    /**
-     * Signals that [group] was reselected (for example a bottom-nav tap on the already selected tab).
-     */
-    public fun onReselect(group: GroupId) {
-        reselectEvents.tryEmit(group)
-    }
-
-    /**
-     * Browser-history style sync: switch to [route]’s group (or the current group for non-group
-     * routes), pop back to [route] if it is already on that stack, otherwise push it.
-     *
-     * The start route always restores the start group and truncates that stack.
-     */
-    public fun popToOrNavigate(route: NavDestination) {
-        if (route == state.startRoute) {
-            val stack = prepareStack(state.startGroup)
-            state.currentGroup = state.startGroup
-            while (stack.size > 1) {
-                stack.removeLastOrNull()
-            }
-            if (stack.isEmpty()) {
-                stack.add(state.startRoute)
-            } else if (stack.first() != state.startRoute) {
-                stack.clear()
-                stack.add(state.startRoute)
-            }
             return
         }
-
-        val targetGroup = resolveGroupFor(route)
-        val stack = prepareStack(targetGroup)
-
-        if (route is NavDestination.Group) {
-            state.currentGroup = targetGroup
-        }
-
-        if (stack.lastOrNull() == route) return
-
-        val index = stack.lastIndexOf(route)
-        if (index >= 0) {
-            while (stack.lastIndex > index) {
-                stack.removeLastOrNull()
-            }
-        } else {
-            stack.add(route)
+        val path = state.activePath
+        if (path.size > 1) {
+            clearGroupSubtree(leaf)
+            state.removeLastActiveGroup()
+        } else if (leaf != state.startGroup) {
+            state.replaceActivePath(listOf(state.startGroup))
         }
     }
 
     /**
-     * Group destinations use their [NavDestination.Group.group]; others use the current group.
+     * Signals that [route]’s group was reselected (for example a bottom-nav tap on the already
+     * selected tab).
      */
-    private fun resolveGroupFor(route: NavDestination): GroupId =
-        (route as? NavDestination.Group)?.group ?: state.currentGroup
+    public fun onReselect(route: NavKey) {
+        reselectEvents.tryEmit(route)
+    }
 
-    private fun prepareStack(group: GroupId): NavBackStack<NavDestination> =
+    /**
+     * Pops back to the last [route] on its group’s stack if that entry is present.
+     *
+     * @return [Unit] if [route] was found (already current or popped to), or `null` if it is not
+     * on the stack.
+     */
+    public fun popTo(route: NavKey): Unit? {
+        val targetGroup = if (route == state.startRoute)
+            state.startGroup
+        else
+            graph.groupOf(route)
+
+        val stack = state.backStacks[targetGroup] ?: return null
+        val index = stack.lastIndexOf(route)
+        if (index < 0) return null
+
+        activateGroup(targetGroup)
+        while (stack.lastIndex > index) {
+            stack.removeLastOrNull()
+        }
+        return Unit
+    }
+
+    private fun activateGroup(target: NavGroup) {
+        val desired = target.pathFromRoot()
+        state.replaceActivePath(desired)
+        prepareStack(target)
+    }
+
+    private fun clearGroupSubtree(group: NavGroup) {
+        state.backStacks.remove(group)
+        for (descendant in group.descendants()) {
+            state.backStacks.remove(descendant)
+        }
+    }
+
+    private fun prepareStack(group: NavGroup): NavBackStack<NavKey> =
         state.backStacks.getOrPut(group) { NavBackStack() }
 }

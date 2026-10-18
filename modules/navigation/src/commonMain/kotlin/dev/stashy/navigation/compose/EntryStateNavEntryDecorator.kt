@@ -5,8 +5,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.EntryStateStore
-import dev.stashy.navigation.NavDestination
 import dev.stashy.navigation.NavigationState
 
 /**
@@ -23,7 +23,7 @@ public fun rememberEntryStateNavEntryDecorator(
  */
 public class EntryStateNavEntryDecorator internal constructor(
     private val store: EntryStateStore,
-) : NavEntryDecorator<NavDestination>(
+) : NavEntryDecorator<NavKey>(
     onPop = { contentKey -> store.remove(contentKey.toString()) },
     decorate = { entry -> EntryStateNavEntryContent(store, entry) },
 )
@@ -31,7 +31,7 @@ public class EntryStateNavEntryDecorator internal constructor(
 @Composable
 private fun EntryStateNavEntryContent(
     store: EntryStateStore,
-    entry: NavEntry<NavDestination>,
+    entry: NavEntry<NavKey>,
 ) {
     val entryId = entry.contentKey.toString()
     CompositionLocalProvider(LocalEntryState provides EntryStateScope(store, entryId)) {

@@ -8,6 +8,7 @@ A module for Jetpack Navigation 3 with multiple group back stacks and web URL sy
 val state = rememberNavigationState(startRoute = Home)
 val navigator = remember { Navigator(state) }
 
+// Compose before NavDisplay so entry state can hydrate from `history.state` on web.
 SyncBrowserHistory(
     navigator = navigator,
     pathOf = { /* ... */ },
@@ -18,6 +19,7 @@ NavDisplay(
     backStack = state.entries,
     entryDecorators = listOf(
         rememberSaveableStateHolderNavEntryDecorator(),
+        rememberEntryStateNavEntryDecorator(state),
         rememberViewModelStoreNavEntryDecorator(),
     ),
     sceneDecoratorStrategies = listOf(
@@ -33,13 +35,11 @@ Destinations:
 ```kotlin
 @Serializable
 data object Home : NavDestination {
-    // group defaults to GroupId.Default — override for multi-tab stacks:
-    // override val group = GroupId("home")
-
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.current
-        HomeScreen(onOpen = { navigator.navigate(Details) })
+        var query by rememberNavEntryState() { "" } // saves state to the navigation entry
+        HomeScreen(query = query, onQueryChange = { query = it }, onOpen = { navigator.navigate(Details) })
     }
 }
 ```

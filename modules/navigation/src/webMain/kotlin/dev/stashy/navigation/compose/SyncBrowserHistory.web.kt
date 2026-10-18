@@ -1,14 +1,12 @@
 package dev.stashy.navigation.compose
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.*
 import dev.stashy.navigation.BrowserHistorySession
 import dev.stashy.navigation.NavDestination
 import dev.stashy.navigation.NavigationState
+import dev.stashy.navigation.hydrateEntryStatesFromHistory
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 @Composable
 public actual fun SyncBrowserHistory(
@@ -22,18 +20,22 @@ public actual fun SyncBrowserHistory(
     val applyEntryState by rememberUpdatedState(applyEntry)
     val backStack = state.entries
 
-    val session =
-        remember(backStack) {
-            BrowserHistorySession(
-                backStack = backStack,
-                pathOf = pathOfState,
-                parsePath = parsePathState,
-                applyEntry = applyEntryState,
-            )
-        }
+    val session = remember(state.entryStates) {
+        hydrateEntryStatesFromHistory(state.entryStates)
+        BrowserHistorySession(
+            backStack = backStack,
+            entryStateStore = state.entryStates,
+            pathOf = pathOfState,
+            parsePath = parsePathState,
+            applyEntry = applyEntryState,
+        )
+    }
 
     LaunchedEffect(session) {
-        session.bind()
+        coroutineScope {
+            launch { session.syncFromBackStack() }
+            launch { session.bind() }
+        }
     }
 
     DisposableEffect(session) {

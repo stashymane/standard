@@ -35,6 +35,7 @@ kotlin {
             implementation(composeLibs.jb.runtime)
 
             implementation(kotlinLibs.serialization.core)
+            implementation(kotlinLibs.serialization.json)
             implementation(composeLibs.androidx.navigation3.runtime)
         }
 

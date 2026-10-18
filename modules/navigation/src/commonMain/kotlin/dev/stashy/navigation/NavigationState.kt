@@ -24,6 +24,7 @@ public class NavigationState(
         mutableStateMapOf<GroupId, NavBackStack<NavDestination>>().also { map ->
             map[startRoute.startGroup()] = NavBackStack(startRoute)
         },
+    public val entryStates: EntryStateStore = EntryStateStore(),
 ) {
     public var currentGroup: GroupId by mutableStateOf(startRoute.startGroup())
 

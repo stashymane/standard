@@ -121,12 +121,12 @@ public class NavGroupScope<T : Any> internal constructor(
             "An entry with the same type has already been added: ${clazz.simpleName}"
         }
         typeGroups[clazz] = group
-        val boundGroup = group
+
         registrations.add {
             addEntryProvider(
                 clazz = clazz,
                 clazzContentKey = contentKey,
-                metadata = { key -> groupMetadata(boundGroup) + metadata(key) },
+                metadata = metadata,
                 content = content,
             )
         }

@@ -18,219 +18,126 @@ private data object HomeDetail : NavKey
 private data object Search : NavKey
 private data object SearchResult : NavKey
 private data object Profile : NavKey
-private data object Posts : NavKey
 private data class PostDetail(val id: Int) : NavKey
-private data object Liked : NavKey
 
 class NavigatorTest {
-    private val graph = navGraph<NavKey> {
-        group {
-            entry<Home> { }
-            entry<HomeDetail> { }
-        }
-        group {
-            entry<Search> { }
-            entry<SearchResult> { }
-        }
-        group {
-            entry<Profile> { }
-            group {
-                entry<Posts> { }
-                entry<PostDetail> { }
-            }
-            group {
-                entry<Liked> { }
-            }
-        }
-    }
-
-    private val homeGroup get() = graph.groupOf(Home)
-    private val searchGroup get() = graph.groupOf(Search)
-    private val profileGroup get() = graph.groupOf(Profile)
-    private val postsGroup get() = graph.groupOf(Posts)
-    private val likedGroup get() = graph.groupOf(Liked)
+    private val topLevelRoutes = setOf(Home, Search, Profile)
 
     private fun navigator(): Navigator =
-        Navigator(NavigationState(Home, graph), graph)
+        Navigator(NavigationState(Home, topLevelRoutes))
 
     @Test
-    fun rootEntriesShowStartRouteOnly() {
+    fun rootBackStackShowsStartRouteOnly() {
         val nav = navigator()
 
-        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(listOf(Home), nav.state.backStack.toList())
         assertEquals(Home, nav.state.current)
-        assertEquals(homeGroup, nav.state.currentGroup)
-        assertEquals(listOf(homeGroup), nav.state.activePath)
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertFalse(nav.canGoBack())
     }
 
     @Test
-    fun navigatePushesWithinSameGroup() {
+    fun navigatePushesOntoCurrentStack() {
         val nav = navigator()
 
         nav.navigate(HomeDetail)
 
-        assertEquals(homeGroup, nav.state.currentGroup)
+        assertEquals(Home, nav.state.topLevelRoute)
         assertEquals(HomeDetail, nav.state.current)
-        assertEquals(listOf(Home, HomeDetail), nav.state.entries.toList())
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
     }
 
     @Test
-    fun siblingSwitchRetainsOffScreenStack() {
+    fun navigateToTopLevelSwitchesStackAndKeepsStartVisible() {
         val nav = navigator()
         nav.navigate(HomeDetail)
         nav.navigate(Search)
 
-        assertEquals(searchGroup, nav.state.currentGroup)
-        assertEquals(listOf(Search), nav.state.entries.toList())
-        assertEquals(listOf(searchGroup), nav.state.activePath)
-        assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(homeGroup).toList())
+        assertEquals(Search, nav.state.topLevelRoute)
+        assertEquals(Search, nav.state.current)
+        assertEquals(listOf(Home, Search), nav.state.backStack.toList())
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(Home).toList())
     }
 
     @Test
-    fun siblingSwitchAmongThreeRetainsMiddle() {
+    fun switchBackRestoresRetainedStack() {
         val nav = navigator()
         nav.navigate(HomeDetail)
         nav.navigate(Search)
-        nav.navigate(SearchResult)
-        nav.navigate(Profile)
-
-        assertEquals(listOf(profileGroup), nav.state.activePath)
-        assertEquals(listOf(Profile), nav.state.entries.toList())
-        assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(homeGroup).toList())
-        assertEquals(listOf(Search, SearchResult), nav.state.backStacks.getValue(searchGroup).toList())
-    }
-
-    @Test
-    fun navigateToGroupRootOnlySwitchesGroup() {
-        val nav = navigator()
-        nav.navigate(Search)
-        nav.navigate(SearchResult)
         nav.navigate(Home)
-        nav.navigate(Search)
 
-        assertEquals(searchGroup, nav.state.currentGroup)
-        assertEquals(listOf(Search, SearchResult), nav.state.backStacks.getValue(searchGroup).toList())
-        assertEquals(SearchResult, nav.state.current)
-        assertEquals(listOf(Search, SearchResult), nav.state.entries.toList())
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
     }
 
     @Test
-    fun goBackPopsWithinGroup() {
+    fun navigateToTopLevelRootDoesNotPush() {
+        val nav = navigator()
+        nav.navigate(Search)
+        nav.navigate(Search)
+
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
+        assertEquals(listOf(Home, Search), nav.state.backStack.toList())
+    }
+
+    @Test
+    fun goBackPopsWithinStack() {
         val nav = navigator()
         nav.navigate(HomeDetail)
+
         assertTrue(nav.canGoBack())
         nav.goBack()
 
-        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(listOf(Home), nav.state.backStack.toList())
         assertEquals(Home, nav.state.current)
         assertFalse(nav.canGoBack())
     }
 
     @Test
-    fun goBackAtNonStartRootPeerReturnsToStartAndRetains() {
+    fun goBackAtNonStartRootReturnsToStartAndRetains() {
         val nav = navigator()
         nav.navigate(Search)
+
         assertTrue(nav.canGoBack())
         nav.goBack()
 
-        assertEquals(homeGroup, nav.state.currentGroup)
-        assertEquals(listOf(Home), nav.state.entries.toList())
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(searchGroup).toList())
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertEquals(listOf(Home), nav.state.backStack.toList())
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
         assertFalse(nav.canGoBack())
     }
 
     @Test
     fun goBackAtStartRootIsNoOp() {
         val nav = navigator()
+
         assertFalse(nav.canGoBack())
         nav.goBack()
 
-        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(listOf(Home), nav.state.backStack.toList())
     }
 
     @Test
-    fun canGoBackTrueForNestedGroupRoot() {
+    fun canGoBackTracksState() {
         val nav = navigator()
-        nav.navigate(Profile)
-        nav.navigate(Posts)
+
+        assertFalse(nav.canGoBack())
+        nav.navigate(HomeDetail)
         assertTrue(nav.canGoBack())
-    }
-
-    @Test
-    fun nestedNavigateAppendsToActivePath() {
-        val nav = navigator()
-        nav.navigate(Profile)
-        nav.navigate(Posts)
-
-        assertEquals(listOf(profileGroup, postsGroup), nav.state.activePath)
-        assertEquals(listOf(Profile, Posts), nav.state.entries.toList())
-    }
-
-    @Test
-    fun nestedSiblingSwitchRetainsOffScreenNestedStack() {
-        val nav = navigator()
-        nav.navigate(Profile)
-        nav.navigate(Posts)
-        nav.navigate(PostDetail(1))
-        nav.navigate(Liked)
-
-        assertEquals(listOf(profileGroup, likedGroup), nav.state.activePath)
-        assertEquals(listOf(Profile, Liked), nav.state.entries.toList())
-        assertEquals(
-            listOf(Posts, PostDetail(1)),
-            nav.state.backStacks.getValue(postsGroup).toList(),
-        )
-    }
-
-    @Test
-    fun backAtNestedGroupRootClearsNestedStack() {
-        val nav = navigator()
-        nav.navigate(Profile)
-        nav.navigate(Posts)
-        nav.navigate(PostDetail(1))
-        nav.goBack() // PostDetail -> Posts
-        nav.goBack() // clear Posts group, back to Profile only
-
-        assertEquals(listOf(profileGroup), nav.state.activePath)
-        assertEquals(listOf(Profile), nav.state.entries.toList())
-        assertFalse(postsGroup in nav.state.backStacks)
-    }
-
-    @Test
-    fun parentSiblingSwitchRetainsNestedStacks() {
-        val nav = navigator()
-        nav.navigate(Profile)
-        nav.navigate(Posts)
-        nav.navigate(PostDetail(1))
-        nav.navigate(Home)
-
-        assertEquals(listOf(homeGroup), nav.state.activePath)
-        assertEquals(listOf(Home), nav.state.entries.toList())
-        assertEquals(listOf(Profile), nav.state.backStacks.getValue(profileGroup).toList())
-        assertEquals(
-            listOf(Posts, PostDetail(1)),
-            nav.state.backStacks.getValue(postsGroup).toList(),
-        )
-
-        nav.navigate(Profile)
-        assertEquals(listOf(profileGroup), nav.state.activePath)
-        assertEquals(listOf(Profile), nav.state.entries.toList())
-        assertEquals(
-            listOf(Posts, PostDetail(1)),
-            nav.state.backStacks.getValue(postsGroup).toList(),
-        )
-
-        nav.navigate(Posts)
-        assertEquals(listOf(profileGroup, postsGroup), nav.state.activePath)
-        assertEquals(listOf(Profile, Posts, PostDetail(1)), nav.state.entries.toList())
+        nav.goBack()
+        nav.navigate(Search)
+        assertTrue(nav.canGoBack())
+        nav.goBack()
+        assertFalse(nav.canGoBack())
     }
 
     @Test
     fun popToReturnsNullWhenRouteNotOnStack() {
         val nav = navigator()
 
-        assertEquals(null, nav.popTo(HomeDetail))
-        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(null, nav.popTo(SearchResult))
+        assertEquals(listOf(Home), nav.state.backStack.toList())
     }
 
     @Test
@@ -239,8 +146,8 @@ class NavigatorTest {
 
         nav.popTo(HomeDetail) ?: nav.navigate(HomeDetail)
 
-        assertEquals(homeGroup, nav.state.currentGroup)
-        assertEquals(listOf(Home, HomeDetail), nav.state.entries.toList())
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
     }
 
     @Test
@@ -248,73 +155,85 @@ class NavigatorTest {
         val nav = navigator()
         nav.navigate(HomeDetail)
         nav.navigate(Search)
+
         assertEquals(Unit, nav.popTo(HomeDetail))
 
-        assertEquals(listOf(Home, HomeDetail), nav.state.entries.toList())
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(searchGroup).toList())
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
     }
 
     @Test
     fun popToStartRootTruncatesStartStack() {
         val nav = navigator()
         nav.navigate(HomeDetail)
+
         assertEquals(Unit, nav.popTo(Home))
 
-        assertEquals(homeGroup, nav.state.currentGroup)
-        assertEquals(listOf(Home), nav.state.entries.toList())
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertEquals(listOf(Home), nav.state.backStack.toList())
     }
 
     @Test
-    fun popToStartFromNestedRetainsOtherGroups() {
+    fun popToOtherTopLevelSwitches() {
         val nav = navigator()
-        nav.navigate(Profile)
-        nav.navigate(Posts)
-        nav.navigate(PostDetail(1))
+        nav.navigate(Search)
+
         assertEquals(Unit, nav.popTo(Home))
 
-        assertEquals(listOf(homeGroup), nav.state.activePath)
-        assertEquals(listOf(Home), nav.state.entries.toList())
-        assertEquals(listOf(Profile), nav.state.backStacks.getValue(profileGroup).toList())
-        assertEquals(
-            listOf(Posts, PostDetail(1)),
-            nav.state.backStacks.getValue(postsGroup).toList(),
-        )
+        assertEquals(Home, nav.state.topLevelRoute)
+        assertEquals(listOf(Home), nav.state.backStack.toList())
+        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
     }
 
     @Test
-    fun entriesIsStableWhenStateUnchanged() {
+    fun popToEntryInOffScreenStack() {
+        val nav = navigator()
+        nav.navigate(Search)
+        nav.navigate(SearchResult)
+        nav.navigate(Home)
+
+        assertEquals(Unit, nav.popTo(SearchResult))
+
+        assertEquals(Search, nav.state.topLevelRoute)
+        assertEquals(listOf(Home, Search, SearchResult), nav.state.backStack.toList())
+        assertEquals(listOf(Home), nav.state.backStacks.getValue(Home).toList())
+    }
+
+    @Test
+    fun backStackIsStableWhenStateUnchanged() {
         val nav = navigator()
         nav.navigate(HomeDetail)
 
-        val first = nav.state.entries
-        val second = nav.state.entries
+        val first = nav.state.backStack
+        val second = nav.state.backStack
 
         assertSame(first, second)
     }
 
     @Test
-    fun entriesReflectMutationsWithStableInstance() {
+    fun backStackReflectsMutationsWithStableInstance() {
         val nav = navigator()
         nav.navigate(HomeDetail)
-        val view = nav.state.entries
+        val view = nav.state.backStack
 
         Snapshot.withMutableSnapshot {
             nav.navigate(Search)
         }
 
-        assertSame(view, nav.state.entries)
-        assertEquals(listOf(Search), nav.state.entries.toList())
+        assertSame(view, nav.state.backStack)
+        assertEquals(listOf(Home, Search), nav.state.backStack.toList())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun entriesViewTracksSnapshotChanges() = runTest {
+    fun backStackViewTracksSnapshotChanges() = runTest {
         val nav = navigator()
         val emissions = mutableListOf<List<NavKey>>()
 
         val job =
             launch(UnconfinedTestDispatcher(testScheduler)) {
-                snapshotFlow { nav.state.entries.toList() }
+                snapshotFlow { nav.state.backStack.toList() }
                     .collect { emissions.add(it) }
             }
 
@@ -328,6 +247,25 @@ class NavigatorTest {
         job.cancel()
 
         assertTrue(emissions.any { it == listOf(Home, HomeDetail) })
-        assertEquals(listOf(Search), emissions.last())
+        assertEquals(listOf(Home, Search), emissions.last())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun reselectEventsEmittedOnReselect() = runTest {
+        val nav = navigator()
+        val emissions = mutableListOf<NavKey>()
+
+        val job =
+            launch(UnconfinedTestDispatcher(testScheduler)) {
+                nav.reselectEvents.collect { emissions.add(it) }
+            }
+
+        nav.onReselect(Home)
+        nav.onReselect(Search)
+
+        job.cancel()
+
+        assertEquals(listOf(Home, Search), emissions)
     }
 }

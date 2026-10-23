@@ -3,25 +3,20 @@
 ## Usage
 
 ```kotlin
-val graph = navGraph<NavKey> {
-    group {
-        entry<Home> { HomeScreen() }
-        entry<HomeDetail> { key -> HomeDetailScreen(key) }
-    }
-    group {
-        entry<Search> { SearchScreen() }
-    }
-    group {
-        entry<Profile> { ProfileScreen() }
-        group {
-            entry<Posts> { PostsScreen() }
-            entry<PostDetail> { key -> PostDetailScreen(key) }
-        }
-    }
+sealed class Route : NavKey {
+    data object Home : Route()
+    data object Search : Route()
+    data class Profile(val id: String) : Route()
+    data class Article(val slug: String) : Route()
 }
 
-val state = rememberNavigationState(startRoute = Home, graph = graph)
-val navigator = remember { Navigator(state, graph) }
+val topLevelRoutes = setOf<NavKey>(Route.Home, Route.Search, Route.Profile("me"))
+
+val state = rememberNavigationState(
+    startRoute = Route.Home,
+    topLevelRoutes = topLevelRoutes,
+)
+val navigator = remember { Navigator(state) }
 
 // Compose before NavDisplay so entry state can hydrate from `history.state` on web.
 SyncBrowserHistory(
@@ -31,7 +26,7 @@ SyncBrowserHistory(
 )
 
 NavDisplay(
-    backStack = state.entries,
+    backStack = state.backStack,
     entryDecorators = listOf(
         rememberSaveableStateHolderNavEntryDecorator(),
         rememberEntryStateNavEntryDecorator(state),
@@ -40,7 +35,12 @@ NavDisplay(
     sceneDecoratorStrategies = listOf(
         rememberNavigatorSceneDecorator(navigator), // provided within navigation-ui module
     ),
-    entryProvider = graph.entryProvider,
+    entryProvider = entryProvider {
+        entry<Route.Home> { HomeScreen() }
+        entry<Route.Search> { SearchScreen() }
+        entry<Route.Profile> { key -> ProfileScreen(key.id) }
+        entry<Route.Article> { key -> ArticleScreen(key.slug) }
+    },
     onBack = { navigator.goBack() },
 )
 ```

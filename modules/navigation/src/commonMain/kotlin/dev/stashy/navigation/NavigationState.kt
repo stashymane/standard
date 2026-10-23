@@ -2,82 +2,69 @@ package dev.stashy.navigation
 
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.runtime.mutableStateOf
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.util.StableSnapshotListView
 
 /**
- * State holder for hierarchical navigation.
+ * State holder for navigation.
  *
- * @param startRoute the start destination key
+ * Each top-level route owns a retained [NavBackStack]. The visible [backStack] always contains the
+ * start route's stack, followed by the current top-level route's stack when it differs (the
+ * "exit through home" pattern).
+ *
+ * @param startRoute the route the user exits through; must be in [topLevelRoutes]
+ * @param topLevelRoutes the top-level routes that can be switched between
+ * @param entryStates optional store for per-entry state
  */
-public class NavigationState private constructor(
+public class NavigationState(
     public val startRoute: NavKey,
-    internal val startGroup: NavGroup,
-    internal val backStacks: SnapshotStateMap<NavGroup, NavBackStack<NavKey>>,
-    public val entryStates: EntryStateStore,
+    public val topLevelRoutes: Set<NavKey>,
+    public val entryStates: EntryStateStore = EntryStateStore(),
 ) {
-    /**
-     * Creates state for [startRoute], resolving the start group from [graph].
-     */
-    public constructor(startRoute: NavKey, graph: NavGraph<*>) : this(
-        startRoute = startRoute,
-        startGroup = graph.groupOf(startRoute),
-        entryStates = EntryStateStore(),
-    )
-
-    private constructor(
-        startRoute: NavKey,
-        startGroup: NavGroup,
-        entryStates: EntryStateStore,
-    ) : this(
-        startRoute = startRoute,
-        startGroup = startGroup,
-        backStacks = mutableStateMapOf<NavGroup, NavBackStack<NavKey>>().also { map ->
-            map[startGroup] = NavBackStack(startRoute)
-        },
-        entryStates = entryStates,
-    )
-
-    private val activePathState: SnapshotStateList<NavGroup> =
-        mutableStateListOf(startGroup)
-
-    internal val activePath: List<NavGroup>
-        get() = activePathState.toList()
-
-    internal fun replaceActivePath(path: List<NavGroup>) {
-        activePathState.clear()
-        activePathState.addAll(path)
-    }
-
-    internal fun removeLastActiveGroup() {
-        if (activePathState.isNotEmpty()) {
-            activePathState.removeAt(activePathState.lastIndex)
+    init {
+        require(startRoute in topLevelRoutes) {
+            "startRoute ($startRoute) must be in topLevelRoutes"
         }
     }
 
-    private val entriesSnapshot: List<NavKey> by derivedStateOf {
-        activePathState.flatMap { group ->
-            backStacks[group].orEmpty()
+    private val topLevelRouteState = mutableStateOf(startRoute)
+
+    /**
+     * The currently selected top-level route.
+     */
+    public var topLevelRoute: NavKey
+        get() = topLevelRouteState.value
+        internal set(value) {
+            require(value in topLevelRoutes) {
+                "Cannot switch to route ($value) that is not in topLevelRoutes"
+            }
+            topLevelRouteState.value = value
+        }
+
+    public val backStacks: Map<NavKey, NavBackStack<NavKey>> = topLevelRoutes.associateWith { key ->
+        NavBackStack(key)
+    }
+
+    private val backStackSnapshot: List<NavKey> by derivedStateOf {
+        buildList {
+            addAll(backStacks.getValue(startRoute))
+            val current = topLevelRoute
+            if (current != startRoute) {
+                addAll(backStacks.getValue(current))
+            }
         }
     }
 
     /**
-     * Flattened destinations along the active group path. Stable identity for
-     * [SnapshotFlow][androidx.compose.runtime.snapshotFlow].
+     * The currently visible back stack.
      */
-    public val entries: List<NavKey> = StableSnapshotListView { entriesSnapshot }
+    public val backStack: List<NavKey> = StableSnapshotListView { backStackSnapshot }
 
+    /**
+     * The current destination, i.e. the last entry in [backStack].
+     */
     public val current: NavKey
-        get() = entriesSnapshot.lastOrNull() ?: startRoute
-
-    internal val currentGroup: NavGroup
-        get() = activePathState.lastOrNull() ?: startGroup
+        get() = backStack.lastOrNull() ?: startRoute
 }
-
-private fun NavBackStack<NavKey>?.orEmpty(): List<NavKey> =
-    this?.toList().orEmpty()

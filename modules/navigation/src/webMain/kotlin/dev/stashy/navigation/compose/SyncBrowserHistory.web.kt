@@ -18,7 +18,7 @@ public actual fun SyncBrowserHistory(
     val pathOfState by rememberUpdatedState(pathOf)
     val parsePathState by rememberUpdatedState(parsePath)
     val applyEntryState by rememberUpdatedState(applyEntry)
-    val backStack = state.entries
+    val backStack = state.backStack
 
     val session = remember(state.entryStates) {
         hydrateEntryStatesFromHistory(state.entryStates)

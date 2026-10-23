@@ -12,10 +12,10 @@ import io.ktor.resources.serialization.ResourcesFormat
 import kotlinx.serialization.serializer
 
 /**
- * Keeps [NavigationState.entries] in sync with the browser History API on web targets.
+ * Keeps [NavigationState.backStack] in sync with the browser History API on web targets.
  * No-op on non-browser platforms.
  *
- * @param state navigation state whose [NavigationState.entries] are observed
+ * @param state navigation state whose [NavigationState.backStack] is observed
  * @param pathOf maps a destination to its URL location (Ktor [io.ktor.http.Url.fullPath], path + query)
  * @param parsePath maps a URL location to a destination
  * @param applyEntry applies [parsePath] results (typically `popTo(route) ?: navigate(route)`)
@@ -29,7 +29,7 @@ public expect fun SyncBrowserHistory(
 )
 
 /**
- * Keeps [navigator]'s [NavigationState.entries] in sync with the browser History API,
+ * Keeps [navigator]'s [NavigationState.backStack] in sync with the browser History API,
  * applying URL changes via `popTo(route) ?: navigate(route)`.
  */
 @Composable
@@ -52,7 +52,7 @@ public fun SyncBrowserHistory(
  * [Entry] must be a `@Serializable` sealed type whose navigable variants are `@Resource`-annotated
  * (same model as [Ktor type-safe routing](https://ktor.io/docs/server-resources.html)).
  *
- * Unrecognized browser locations fall back to the current top of [NavigationState.entries], then
+ * Unrecognized browser locations fall back to the current top of [NavigationState.backStack], then
  * the URL is corrected to match that entry.
  */
 @Composable
@@ -62,7 +62,7 @@ public inline fun <reified Entry : NavKey> SyncBrowserHistory(
     noinline applyEntry: (Entry) -> Unit,
 ) {
     @Suppress("UNCHECKED_CAST")
-    val history = state.entries as List<Entry>
+    val history = state.backStack as List<Entry>
     SyncBrowserHistory(
         state = state,
         pathOf = { destination ->

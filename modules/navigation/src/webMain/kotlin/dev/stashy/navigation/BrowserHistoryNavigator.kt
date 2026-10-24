@@ -18,12 +18,10 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 internal class BrowserHistoryNavigator(
     override val state: NavigationState,
+    private val backing: Navigator = DefaultNavigator(state),
     private val pathOf: (NavKey) -> String,
     private val parsePath: (String) -> NavKey,
-) : Navigator {
-    private val defaultNavigator = DefaultNavigator(state)
-    override val reselectEvents = defaultNavigator.reselectEvents
-
+) : Navigator by backing {
     private val pathHistory = mutableListOf<String>()
     private var historyIndex = 0
     private var popStateListener: ((Event) -> Unit)? = null
@@ -46,24 +44,34 @@ internal class BrowserHistoryNavigator(
             val stack = state.backStacks.getValue(route)
             while (stack.size > 1) stack.removeLastOrNull()
         } else {
-            defaultNavigator.popTo(route) ?: defaultNavigator.navigate(route)
+            backing.popTo(route) ?: backing.navigate(route)
         }
     }
 
     fun attach() {
-        hydrateEntryStatesFromHistory(state.entryStates)
+        if (popStateListener != null) throw IllegalStateException("Navigator is already attached")
+        val stateExisted = hydrateEntryStatesFromHistory(state.entryStates)
 
-        val listener: (Event) -> Unit = { event -> onPopState(event) }
+        val listener: (Event) -> Unit = ::handlePopState
         popStateListener = listener
         window.addEventListener("popstate", listener)
 
         val initial = parsePath(currentLocation())
         applyHistoryEntry(initial)
         val path = pathOf(state.backStack.last())
-        replaceState(path)
+        val startPath = normalizeResourceLocation(pathOf(state.startRoute))
+
         pathHistory.clear()
         pathHistory.add(path)
         historyIndex = 0
+
+        if (!stateExisted && normalizeResourceLocation(path) != startPath) {
+            replaceState(pathOf(state.startRoute))
+            pathHistory[historyIndex] = startPath
+            pushHistory(path)
+        } else {
+            replaceState(path)
+        }
     }
 
     fun detach() {
@@ -84,7 +92,7 @@ internal class BrowserHistoryNavigator(
             }
     }
 
-    private fun onPopState(event: Event) {
+    private fun handlePopState(event: Event) {
         state.entryStates.restore(decodeEntryStateSnapshot(readPopStatePayload(event)))
         applyHistoryEntry(parsePath(currentLocation()))
         syncHistoryIndexToCurrentPath()
@@ -106,16 +114,17 @@ internal class BrowserHistoryNavigator(
     }
 
     override fun navigate(route: NavKey) {
-        defaultNavigator.popTo(route) ?: defaultNavigator.navigate(route)
+        backing.popTo(route) ?: backing.navigate(route)
         pushHistory(pathOf(state.backStack.last()))
     }
 
     override fun goBack() {
         if (!canGoBack()) return
-        if (historyIndex > 0) {
+        val startPath = normalizeResourceLocation(pathOf(state.startRoute))
+        if (historyIndex > 0 || currentLocation() != startPath) {
             window.history.go(-1)
         } else {
-            defaultNavigator.goBack()
+            backing.goBack()
             replaceState(pathOf(state.backStack.last()))
         }
     }
@@ -129,16 +138,13 @@ internal class BrowserHistoryNavigator(
             return Unit
         }
 
-        val result = defaultNavigator.popTo(route)
+        val result = backing.popTo(route)
         if (result == null) {
-            defaultNavigator.navigate(route)
+            backing.navigate(route)
         }
         pushHistory(pathOf(state.backStack.last()))
         return result
     }
-
-    override fun canGoBack(): Boolean = defaultNavigator.canGoBack()
-    override fun onReselect(route: NavKey) = defaultNavigator.onReselect(route)
 
     companion object {
         private const val HISTORY_DEBOUNCE_MS: Long = 200L

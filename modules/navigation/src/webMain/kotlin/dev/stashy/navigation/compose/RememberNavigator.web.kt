@@ -16,7 +16,7 @@ public actual fun rememberNavigator(
     parsePath: (String) -> NavKey,
 ): Navigator {
     val navigator = remember(state, pathOf, parsePath) {
-        BrowserHistoryNavigator(state, pathOf, parsePath)
+        BrowserHistoryNavigator(state, pathOf = pathOf, parsePath = parsePath)
     }
 
     DisposableEffect(navigator) {

@@ -28,6 +28,9 @@ internal fun decodeEntryStateSnapshot(raw: Any?): Map<String, Map<String, String
     }.getOrDefault(emptyMap())
 }
 
-internal fun hydrateEntryStatesFromHistory(store: EntryStateStore) {
-    store.restore(decodeEntryStateSnapshot(readCurrentHistoryState()))
+internal fun hydrateEntryStatesFromHistory(store: EntryStateStore): Boolean {
+    val raw = readCurrentHistoryState()
+    val snapshot = decodeEntryStateSnapshot(raw)
+    store.restore(snapshot)
+    return raw != null && snapshot.isNotEmpty()
 }

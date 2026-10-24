@@ -50,6 +50,7 @@ include(
     "modules:ui-components",
     "modules:ui-gradients",
     "modules:ui-responsive",
+    "samples:navigation-sample",
 )
 
 rootProject.name = "standard"

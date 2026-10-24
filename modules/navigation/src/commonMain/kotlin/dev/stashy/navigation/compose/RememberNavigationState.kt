@@ -3,7 +3,7 @@ package dev.stashy.navigation.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavKey
-import dev.stashy.navigation.NavigationState
+import dev.stashy.navigation.state.NavigationState
 
 /**
  * Remembers a [NavigationState] for [startRoute] and the given [topLevelRoutes].

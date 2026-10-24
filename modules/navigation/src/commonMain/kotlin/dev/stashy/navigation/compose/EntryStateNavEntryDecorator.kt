@@ -6,17 +6,9 @@ import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavEntryDecorator
 import androidx.navigation3.runtime.NavKey
-import dev.stashy.navigation.EntryStateStore
-import dev.stashy.navigation.NavigationState
-
-/**
- * Provides [LocalEntryState] for each rendered [NavEntry] and clears stored state when the entry
- * is popped from the back stack.
- */
-@Composable
-public fun rememberEntryStateNavEntryDecorator(
-    state: NavigationState,
-): EntryStateNavEntryDecorator = remember(state.entryStates) { EntryStateNavEntryDecorator(state.entryStates) }
+import dev.stashy.navigation.state.EntryStateScope
+import dev.stashy.navigation.state.EntryStateStore
+import dev.stashy.navigation.state.NavigationState
 
 /**
  * @see rememberEntryStateNavEntryDecorator
@@ -38,3 +30,12 @@ private fun EntryStateNavEntryContent(
         entry.Content()
     }
 }
+
+/**
+ * Provides [dev.stashy.navigation.state.LocalEntryState] for each rendered [NavEntry] and clears stored state when the entry
+ * is popped from the back stack.
+ */
+@Composable
+public fun rememberEntryStateNavEntryDecorator(
+    state: NavigationState,
+): EntryStateNavEntryDecorator = remember(state.entryStates) { EntryStateNavEntryDecorator(state.entryStates) }

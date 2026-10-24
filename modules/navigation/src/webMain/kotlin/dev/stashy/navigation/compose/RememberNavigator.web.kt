@@ -6,8 +6,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.BrowserHistoryNavigator
-import dev.stashy.navigation.NavigationState
 import dev.stashy.navigation.Navigator
+import dev.stashy.navigation.state.NavigationState
 
 @Composable
 public actual fun rememberNavigator(

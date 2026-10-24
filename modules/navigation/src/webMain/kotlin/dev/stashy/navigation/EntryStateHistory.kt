@@ -1,5 +1,6 @@
 package dev.stashy.navigation
 
+import dev.stashy.navigation.state.EntryStateStore
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 

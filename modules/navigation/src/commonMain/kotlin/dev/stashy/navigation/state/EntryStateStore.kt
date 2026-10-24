@@ -1,4 +1,4 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.state
 
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.Snapshot
@@ -6,7 +6,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 
 /**
  * Holds per–nav-entry state as JSON strings, keyed by [NavEntry.contentKey][androidx.navigation3.runtime.NavEntry.contentKey]
- * and logical state keys from [rememberNavEntryState][dev.stashy.navigation.compose.rememberNavEntryState].
+ * and logical state keys from [rememberNavEntryState][rememberNavEntryState].
  */
 public class EntryStateStore {
     private val states: SnapshotStateMap<String, Map<String, String>> = mutableStateMapOf()

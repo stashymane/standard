@@ -1,6 +1,7 @@
 package dev.stashy.navigation
 
 import androidx.navigation3.runtime.NavKey
+import dev.stashy.navigation.state.NavigationState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 

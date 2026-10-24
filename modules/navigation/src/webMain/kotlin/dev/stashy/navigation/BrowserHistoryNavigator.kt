@@ -3,6 +3,7 @@ package dev.stashy.navigation
 import androidx.compose.runtime.snapshotFlow
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.resources.normalizeResourceLocation
+import dev.stashy.navigation.state.NavigationState
 import kotlinx.browser.window
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
@@ -13,7 +14,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Web [Navigator] implementation that drives the browser History API.
  *
  * Navigation actions update the browser URL and state, and browser back/forward events update
- * [NavigationState].
+ * [dev.stashy.navigation.state.NavigationState].
  */
 internal class BrowserHistoryNavigator(
     override val state: NavigationState,

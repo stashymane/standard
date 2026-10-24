@@ -1,4 +1,4 @@
-package dev.stashy.navigation
+package dev.stashy.navigation.state
 
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue

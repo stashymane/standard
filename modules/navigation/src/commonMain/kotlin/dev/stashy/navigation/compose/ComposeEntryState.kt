@@ -1,29 +1,10 @@
 package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.*
-import dev.stashy.navigation.EntryStateStore
+import dev.stashy.navigation.NavDefaults
+import dev.stashy.navigation.state.EntryStateScope
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
-
-/**
- * Scope for reading and writing state for the current [NavEntry][androidx.navigation3.runtime.NavEntry].
- *
- * Provided by [rememberEntryStateNavEntryDecorator].
- */
-public class EntryStateScope internal constructor(
-    public val store: EntryStateStore,
-    internal val entryId: String,
-) {
-    internal companion object {
-        internal const val MAX_RADIX = 36
-
-        internal val json = Json {
-            encodeDefaults = true
-            ignoreUnknownKeys = true
-        }
-    }
-}
 
 /**
  * [EntryStateScope] for the current nav entry, or an error if the entry-state decorator is missing.
@@ -31,14 +12,6 @@ public class EntryStateScope internal constructor(
 public val LocalEntryState: ProvidableCompositionLocal<EntryStateScope> = staticCompositionLocalOf {
     error("No LocalEntryState provided. Add rememberEntryStateNavEntryDecorator to NavDisplay entryDecorators.")
 }
-
-/**
- * Decodes [json] with [serializer], or returns null when decoding fails.
- */
-internal fun <T> decodeNavEntryStateValue(
-    json: String,
-    serializer: KSerializer<T>,
-): T? = runCatching { EntryStateScope.json.decodeFromString(serializer, json) }.getOrNull()
 
 /**
  * Remembers serializable state scoped to the current nav entry.
@@ -59,14 +32,14 @@ public fun <T> rememberNavEntryState(
 
     val initial = remember(scope.entryId, resolvedKey) {
         scope.store.getString(scope.entryId, resolvedKey)?.let { stored ->
-            decodeNavEntryStateValue(stored, serializer)
+            NavDefaults.json.decodeFromString(serializer, stored)
         } ?: init()
     }
     val state = remember(scope.entryId, resolvedKey) { mutableStateOf(initial) }
 
     LaunchedEffect(scope.entryId, resolvedKey) {
         snapshotFlow(state::value).collect { value ->
-            val json = EntryStateScope.json.encodeToString(serializer, value)
+            val json = NavDefaults.json.encodeToString(serializer, value)
             scope.store.setString(scope.entryId, resolvedKey, json)
         }
     }

@@ -2,12 +2,12 @@ package dev.stashy.navigation.compose
 
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavKey
-import dev.stashy.navigation.NavigationState
 import dev.stashy.navigation.Navigator
 import dev.stashy.navigation.resources.defaultResourcesFormat
 import dev.stashy.navigation.resources.fromResourcePath
 import dev.stashy.navigation.resources.toResourcePath
-import io.ktor.resources.serialization.ResourcesFormat
+import dev.stashy.navigation.state.NavigationState
+import io.ktor.resources.serialization.*
 import kotlinx.serialization.serializer
 
 /**

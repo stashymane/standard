@@ -1,10 +1,9 @@
 package dev.stashy.navigation
 
-import dev.stashy.navigation.compose.decodeNavEntryStateValue
+import dev.stashy.navigation.state.EntryStateStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlinx.serialization.builtins.serializer
 
 class EntryStateStoreTest {
     @Test
@@ -27,7 +26,7 @@ class EntryStateStoreTest {
 
     @Test
     fun decodeFailureReturnsNull() {
-        assertNull(decodeNavEntryStateValue("not-json", String.serializer()))
+        assertNull(NavDefaults.json.decodeFromString("not-json"))
     }
 
     @Test

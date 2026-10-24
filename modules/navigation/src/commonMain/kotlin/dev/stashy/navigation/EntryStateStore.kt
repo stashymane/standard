@@ -1,6 +1,7 @@
 package dev.stashy.navigation
 
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 
 /**
@@ -19,19 +20,25 @@ public class EntryStateStore {
      * Replaces all stored entry state (for example after reading `history.state` on web).
      */
     public fun restore(snapshot: Map<String, Map<String, String>>) {
-        states.clear()
-        states.putAll(snapshot)
+        Snapshot.withMutableSnapshot {
+            states.clear()
+            states.putAll(snapshot)
+        }
     }
 
     public fun getString(entryId: String, key: String): String? = states[entryId]?.get(key)
 
     public fun setString(entryId: String, key: String, json: String) {
-        val entry = states[entryId].orEmpty().toMutableMap()
-        entry[key] = json
-        states[entryId] = entry
+        Snapshot.withMutableSnapshot {
+            val entry = states[entryId].orEmpty().toMutableMap()
+            entry[key] = json
+            states[entryId] = entry
+        }
     }
 
     public fun remove(entryId: String) {
-        states.remove(entryId)
+        Snapshot.withMutableSnapshot {
+            states.remove(entryId)
+        }
     }
 }

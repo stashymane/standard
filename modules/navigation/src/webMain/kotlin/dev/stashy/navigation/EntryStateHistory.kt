@@ -17,11 +17,10 @@ internal fun encodeEntryStateSnapshot(snapshot: Map<String, Map<String, String>>
 
 internal fun decodeEntryStateSnapshot(raw: Any?): Map<String, Map<String, String>> {
     if (raw == null) return emptyMap()
-    val json =
-        when (raw) {
-            is String -> raw
-            else -> raw.toString()
-        }
+    val json = when (raw) {
+        is String -> raw
+        else -> raw.toString()
+    }
     if (json.isBlank()) return emptyMap()
     return runCatching {
         persistedJson.decodeFromString<PersistedEntryStates>(json).entries

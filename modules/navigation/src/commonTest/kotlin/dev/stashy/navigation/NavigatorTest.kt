@@ -24,7 +24,7 @@ class NavigatorTest {
     private val topLevelRoutes = setOf(Home, Search, Profile)
 
     private fun navigator(): Navigator =
-        Navigator(NavigationState(Home, topLevelRoutes))
+        DefaultNavigator(NavigationState(Home, topLevelRoutes))
 
     @Test
     fun rootBackStackShowsStartRouteOnly() {

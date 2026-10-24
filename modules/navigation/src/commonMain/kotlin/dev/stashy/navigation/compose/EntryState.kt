@@ -44,7 +44,7 @@ internal fun <T> decodeNavEntryStateValue(
  * Remembers serializable state scoped to the current nav entry.
  *
  * State survives while the entry remains on the back stack and, on web, is persisted in
- * `history.state` (not the URL) when [SyncBrowserHistory] is used.
+ * `history.state` (not the URL) by the browser-history navigator.
  *
  * @param key logical key for this value; defaults to a hash of the call site
  */

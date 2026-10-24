@@ -16,14 +16,7 @@ val state = rememberNavigationState(
     startRoute = Route.Home,
     topLevelRoutes = topLevelRoutes,
 )
-val navigator = remember { Navigator(state) }
-
-// Compose before NavDisplay so entry state can hydrate from `history.state` on web.
-SyncBrowserHistory(
-    navigator = navigator,
-    pathOf = { /* ... */ },
-    parsePath = { /* ... */ },
-)
+val navigator = rememberNavigator<Route>(state)
 
 NavDisplay(
     backStack = state.backStack,

@@ -1,6 +1,5 @@
 package dev.stashy.navigation
 
-import androidx.compose.runtime.snapshotFlow
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.resources.normalizeResourceLocation
 import dev.stashy.navigation.state.NavigationState
@@ -81,7 +80,7 @@ internal class BrowserHistoryNavigator(
 
     @OptIn(FlowPreview::class)
     suspend fun syncEntryStates() {
-        snapshotFlow { state.entryStates.snapshot() }
+        state.entryStates.changes
             .debounce(HISTORY_DEBOUNCE_MS.milliseconds)
             .collect {
                 val path = pathOf(state.backStack.last())
@@ -108,6 +107,9 @@ internal class BrowserHistoryNavigator(
         while (pathHistory.lastIndex > historyIndex) {
             pathHistory.removeLastOrNull()
         }
+        // Update the current history entry with the latest entry state before moving forward.
+        // Otherwise a fast Enter after typing can leave the previous entry with stale/empty state.
+        replaceState(pathHistory[historyIndex])
         historyIndex++
         pathHistory.add(path)
         pushState(path)

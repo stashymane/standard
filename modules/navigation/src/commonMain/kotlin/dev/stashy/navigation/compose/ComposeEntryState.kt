@@ -35,16 +35,34 @@ public fun <T> rememberNavEntryState(
             NavDefaults.json.decodeFromString(serializer, stored)
         } ?: init()
     }
-    val state = remember(scope.entryId, resolvedKey) { mutableStateOf(initial) }
-
-    LaunchedEffect(scope.entryId, resolvedKey) {
-        snapshotFlow(state::value).collect { value ->
-            val json = NavDefaults.json.encodeToString(serializer, value)
-            scope.store.setString(scope.entryId, resolvedKey, json)
-        }
+    val composeState = remember(scope.entryId, resolvedKey) { mutableStateOf(initial) }
+    
+    return remember(scope.entryId, resolvedKey) {
+        SyncEntryState(
+            composeState = composeState,
+            serializer = serializer,
+            scope = scope,
+            key = resolvedKey,
+        )
     }
+}
 
-    return state
+private class SyncEntryState<T>(
+    private val composeState: MutableState<T>,
+    private val serializer: KSerializer<T>,
+    private val scope: EntryStateScope,
+    private val key: String,
+) : MutableState<T> {
+    override var value: T
+        get() = composeState.value
+        set(value) {
+            composeState.value = value
+            val json = NavDefaults.json.encodeToString(serializer, value)
+            scope.store.setString(scope.entryId, key, json)
+        }
+
+    override fun component1(): T = value
+    override fun component2(): (T) -> Unit = { value = it }
 }
 
 /**

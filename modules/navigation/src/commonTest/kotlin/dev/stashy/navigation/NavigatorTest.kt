@@ -28,7 +28,7 @@ class NavigatorTest {
         val nav = navigator()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertEquals(Home, nav.state.current)
+        assertTrue(nav.state.current.isEmpty())
         assertEquals(Home, nav.state.topLevelRoute)
         assertFalse(nav.canGoBack())
     }
@@ -40,8 +40,23 @@ class NavigatorTest {
         nav.navigate(HomeDetail)
 
         assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(HomeDetail, nav.state.current)
+        assertEquals(listOf(HomeDetail), nav.state.current)
         assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
+    }
+
+    @Test
+    fun currentExcludesStartRouteFromSelectedStack() {
+        val nav = navigator()
+
+        nav.navigate(HomeDetail)
+        assertEquals(listOf(HomeDetail), nav.state.current)
+
+        nav.navigate(Search)
+        nav.navigate(SearchResult)
+        assertEquals(listOf(Search, SearchResult), nav.state.current)
+
+        nav.navigate(Home)
+        assertEquals(listOf(HomeDetail), nav.state.current)
     }
 
     @Test
@@ -51,7 +66,7 @@ class NavigatorTest {
         nav.navigate(Search)
 
         assertEquals(Search, nav.state.topLevelRoute)
-        assertEquals(Search, nav.state.current)
+        assertEquals(listOf(Search), nav.state.current)
         assertEquals(listOf(Home, Search), nav.state.backStack.toList())
         assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(Home).toList())
     }
@@ -87,7 +102,7 @@ class NavigatorTest {
         nav.goBack()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertEquals(Home, nav.state.current)
+        assertTrue(nav.state.current.isEmpty())
         assertFalse(nav.canGoBack())
     }
 

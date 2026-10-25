@@ -56,7 +56,7 @@ fun App() {
             },
             bottomBar = {
                 BottomBar(
-                    current = state.current,
+                    current = state.current.firstOrNull { it in topLevelRoutes } ?: state.startRoute,
                     onSelect = { navigator.navigate(it) },
                 )
             },

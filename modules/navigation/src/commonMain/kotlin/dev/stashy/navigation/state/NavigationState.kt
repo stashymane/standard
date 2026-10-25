@@ -20,7 +20,7 @@ import dev.stashy.navigation.util.StableSnapshotListView
  */
 public class NavigationState(
     public val startRoute: NavKey,
-    public val topLevelRoutes: Set<NavKey>,
+    topLevelRoutes: Set<NavKey>,
     public val entryStates: EntryStateStore = EntryStateStore(),
 ) {
     init {
@@ -34,16 +34,16 @@ public class NavigationState(
     /**
      * The currently selected top-level route.
      */
-    public var topLevelRoute: NavKey
+    internal var topLevelRoute: NavKey
         get() = topLevelRouteState.value
-        internal set(value) {
-            require(value in topLevelRoutes) {
-                "Cannot switch to route ($value) that is not in topLevelRoutes"
+        set(value) {
+            require(value in backStacks.keys) {
+                "Cannot switch to route ($value) that is not a top-level route"
             }
             topLevelRouteState.value = value
         }
 
-    public val backStacks: Map<NavKey, NavBackStack<NavKey>> = topLevelRoutes.associateWith { key ->
+    internal val backStacks: Map<NavKey, NavBackStack<NavKey>> = topLevelRoutes.associateWith { key ->
         NavBackStack(key)
     }
 
@@ -57,14 +57,18 @@ public class NavigationState(
         }
     }
 
+    private val currentSnapshot: List<NavKey> by derivedStateOf {
+        val stack = backStacks.getValue(topLevelRoute)
+        stack.toList()
+    }
+
     /**
-     * The currently visible back stack.
+     * The entire currently visible back stack.
      */
     public val backStack: List<NavKey> = StableSnapshotListView { backStackSnapshot }
 
     /**
-     * The current destination, i.e. the last entry in [backStack].
+     * The current top-level route's back stack.
      */
-    public val current: NavKey
-        get() = backStack.lastOrNull() ?: startRoute
+    public val current: List<NavKey> = StableSnapshotListView { currentSnapshot }
 }

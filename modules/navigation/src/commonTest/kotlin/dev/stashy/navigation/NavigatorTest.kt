@@ -28,7 +28,7 @@ class NavigatorTest {
         val nav = navigator()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertTrue(nav.state.current.isEmpty())
+        assertEquals(listOf(Home), nav.state.current)
         assertEquals(Home, nav.state.topLevelRoute)
         assertFalse(nav.canGoBack())
     }
@@ -40,23 +40,23 @@ class NavigatorTest {
         nav.navigate(HomeDetail)
 
         assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.current)
         assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
     }
 
     @Test
-    fun currentExcludesStartRouteFromSelectedStack() {
+    fun currentContainsSelectedTopLevelStack() {
         val nav = navigator()
 
         nav.navigate(HomeDetail)
-        assertEquals(listOf(HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.current)
 
         nav.navigate(Search)
         nav.navigate(SearchResult)
         assertEquals(listOf(Search, SearchResult), nav.state.current)
 
         nav.navigate(Home)
-        assertEquals(listOf(HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.current)
     }
 
     @Test
@@ -67,7 +67,7 @@ class NavigatorTest {
 
         assertEquals(Search, nav.state.topLevelRoute)
         assertEquals(listOf(Search), nav.state.current)
-        assertEquals(listOf(Home, Search), nav.state.backStack.toList())
+        assertEquals(listOf(Home, HomeDetail, Search), nav.state.backStack.toList())
         assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(Home).toList())
     }
 
@@ -102,7 +102,7 @@ class NavigatorTest {
         nav.goBack()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertTrue(nav.state.current.isEmpty())
+        assertEquals(listOf(Home), nav.state.current)
         assertFalse(nav.canGoBack())
     }
 
@@ -176,14 +176,14 @@ class NavigatorTest {
     }
 
     @Test
-    fun popToStartRootTruncatesStartStack() {
+    fun popToStartRootKeepsStartStack() {
         val nav = navigator()
         nav.navigate(HomeDetail)
 
         assertEquals(Unit, nav.popTo(Home))
 
         assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home), nav.state.backStack.toList())
+        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
     }
 
     @Test
@@ -234,7 +234,7 @@ class NavigatorTest {
         }
 
         assertSame(view, nav.state.backStack)
-        assertEquals(listOf(Home, Search), nav.state.backStack.toList())
+        assertEquals(listOf(Home, HomeDetail, Search), nav.state.backStack.toList())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -259,7 +259,7 @@ class NavigatorTest {
         job.cancel()
 
         assertTrue(emissions.any { it == listOf(Home, HomeDetail) })
-        assertEquals(listOf(Home, Search), emissions.last())
+        assertEquals(listOf(Home, HomeDetail, Search), emissions.last())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

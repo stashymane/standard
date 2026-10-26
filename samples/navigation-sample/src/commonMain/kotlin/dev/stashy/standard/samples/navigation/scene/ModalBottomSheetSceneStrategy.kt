@@ -15,6 +15,7 @@ import androidx.navigation3.scene.OverlayScene
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.scene.SceneStrategy
 import androidx.navigation3.scene.SceneStrategyScope
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Renders entries marked with [bottomSheet] in a Material3 [ModalBottomSheet] overlay.
@@ -34,11 +35,17 @@ internal class ModalBottomSheetSceneStrategy : SceneStrategy<NavKey> {
             override val overlaidEntries: List<NavEntry<NavKey>> = entries.dropLast(1)
 
             private lateinit var sheetState: SheetState
+            private var dismissalRequested = false
 
             override val content: @Composable () -> Unit = {
                 sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
                 ModalBottomSheet(
-                    onDismissRequest = onBack,
+                    onDismissRequest = {
+                        if (!dismissalRequested) {
+                            dismissalRequested = true
+                            onBack()
+                        }
+                    },
                     sheetState = sheetState,
                 ) {
                     entry.Content()
@@ -46,8 +53,14 @@ internal class ModalBottomSheetSceneStrategy : SceneStrategy<NavKey> {
             }
 
             override suspend fun onRemove() {
-                if (::sheetState.isInitialized) {
+                dismissalRequested = true
+                if (!::sheetState.isInitialized) return
+
+                try {
                     sheetState.hide()
+                } catch (_: CancellationException) {
+                    // A competing dismissal can cancel the animation. NavDisplay only removes
+                    // this scene after onRemove returns, so don't leave an invisible overlay.
                 }
             }
         }

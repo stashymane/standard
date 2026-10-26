@@ -5,16 +5,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -28,13 +20,9 @@ import dev.stashy.navigation.compose.rememberNavigationState
 import dev.stashy.navigation.compose.rememberNavigator
 import dev.stashy.navigation.ui.rememberNavigatorSceneDecorator
 import dev.stashy.standard.samples.navigation.components.BottomBar
+import dev.stashy.standard.samples.navigation.components.BreadcrumbBar
 import dev.stashy.standard.samples.navigation.scene.ModalBottomSheetSceneStrategy
-import dev.stashy.standard.samples.navigation.screens.ArticleScreen
-import dev.stashy.standard.samples.navigation.screens.HomeScreen
-import dev.stashy.standard.samples.navigation.screens.ProfileScreen
-import dev.stashy.standard.samples.navigation.screens.SearchResultsScreen
-import dev.stashy.standard.samples.navigation.screens.SearchScreen
-import dev.stashy.standard.samples.navigation.screens.ShareSheetScreen
+import dev.stashy.standard.samples.navigation.screens.*
 
 private val topLevelRoutes = setOf<NavKey>(Route.Home, Route.Search, Route.Profile("me"))
 
@@ -52,20 +40,24 @@ fun App() {
         Scaffold(
             Modifier.fillMaxSize(),
             topBar = {
-                TopAppBar(
-                    title = { Text("Navigation Sample") },
-                    navigationIcon = {
-                        if (navigator.canGoBack()) {
-                            IconButton(onClick = { navigator.goBack() }) {
-                                Text("←")
+                Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
+                    BreadcrumbBar(path = state.backStack)
+                    TopAppBar(
+                        title = { Text("Navigation Sample") },
+                        navigationIcon = {
+                            if (navigator.canGoBack()) {
+                                IconButton(onClick = { navigator.goBack() }) {
+                                    Text("←")
+                                }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             },
             bottomBar = {
                 BottomBar(
-                    current = state.current.firstOrNull { it in topLevelRoutes } ?: state.startRoute,
+                    current = state.current.firstOrNull { it in topLevelRoutes }
+                        ?: state.startRoute,
                     onSelect = { navigator.navigate(it) },
                 )
             },

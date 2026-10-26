@@ -123,9 +123,22 @@ internal class BrowserHistoryNavigator(
     }
 
     override fun navigate(route: NavKey) {
-        backing.popTo(route) ?: backing.navigate(route)
-        if (route is OverlayNavKey) return
-        pushHistory(urlPath())
+        if (route is OverlayNavKey) {
+            backing.navigate(route)
+            return
+        }
+
+        val previousTopLevel = state.topLevelRoute
+        val previousDestination = state.lastNonOverlayRoute()
+
+        backing.navigate(route)
+
+        if (
+            state.topLevelRoute != previousTopLevel ||
+            state.lastNonOverlayRoute() != previousDestination
+        ) {
+            pushHistory(urlPath())
+        }
     }
 
     override fun goBack() {

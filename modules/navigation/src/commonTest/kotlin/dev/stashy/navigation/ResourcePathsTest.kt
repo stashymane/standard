@@ -1,9 +1,7 @@
 package dev.stashy.navigation
 
-import dev.stashy.navigation.resources.fromResourcePath
-import dev.stashy.navigation.resources.normalizeResourceLocation
-import dev.stashy.navigation.resources.splitResourceLocation
-import dev.stashy.navigation.resources.toResourcePath
+import androidx.navigation3.runtime.NavKey
+import dev.stashy.navigation.resources.*
 import io.ktor.resources.*
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
@@ -45,54 +43,69 @@ class NestedUsers {
     data class ById(val parent: NestedUsers = NestedUsers(), val id: Long)
 }
 
+@Serializable
+sealed interface OverlayTestRoutes : NavKey {
+    @Resource("/overlay")
+    data object OverlayOnly : OverlayTestRoutes, OverlayNavKey
+}
+
+@Serializable
+sealed interface CollidingTestRoutes : NavKey {
+    @Resource("/colliding")
+    data object OverlayCandidate : CollidingTestRoutes, OverlayNavKey
+
+    @Resource("/colliding")
+    data object AddressableCandidate : CollidingTestRoutes
+}
+
 class ResourcePathsTest {
     private val testRoutesSerializer = TestRoutes.serializer()
     private val nestedByIdSerializer = NestedUsers.ById.serializer()
 
     @Test
-    fun homeRoundTrip() {
+    fun `home route round-trips through its path`() {
         val route = TestRoutes.Home
         assertEquals("/home", route.toResourcePath(testRoutesSerializer))
         assertEquals(TestRoutes.Home, fromResourcePath("/home", testRoutesSerializer))
     }
 
     @Test
-    fun queryParameterRoundTrip() {
+    fun `query parameters round-trip`() {
         val route = TestRoutes.Child("value")
         assertEquals("/parent/child?param1=value", route.toResourcePath(testRoutesSerializer))
         assertEquals(route, fromResourcePath("/parent/child?param1=value", testRoutesSerializer))
     }
 
     @Test
-    fun listQueryRoundTrip() {
+    fun `list query parameters round-trip`() {
         val route = TestRoutes.Items(listOf("a", "b"))
         val location = route.toResourcePath(testRoutesSerializer)
         assertEquals(route, fromResourcePath(location, testRoutesSerializer))
     }
 
     @Test
-    fun defaultQueryRestoredOnDecodeWhenOmittedFromUrl() {
+    fun `default query values restore when omitted`() {
         assertEquals(TestRoutes.Articles(), fromResourcePath("/articles", testRoutesSerializer))
         val encoded = TestRoutes.Articles().toResourcePath(testRoutesSerializer)
         assertEquals(TestRoutes.Articles(), fromResourcePath(encoded, testRoutesSerializer))
     }
 
     @Test
-    fun tailPathRoundTrip() {
+    fun `tail path segments round-trip`() {
         val route = TestRoutes.Docs(listOf("guide", "intro"))
         assertEquals("/docs/guide/intro", route.toResourcePath(testRoutesSerializer))
         assertEquals(route, fromResourcePath("/docs/guide/intro", testRoutesSerializer))
     }
 
     @Test
-    fun optionalSegmentWithValue() {
+    fun `optional segment round-trips when present`() {
         val route = TestRoutes.OptionalSegment("x")
         assertEquals("/optional/x", route.toResourcePath(testRoutesSerializer))
         assertEquals(route, fromResourcePath("/optional/x", testRoutesSerializer))
     }
 
     @Test
-    fun optionalSegmentWithoutValue() {
+    fun `optional segment round-trips when absent`() {
         assertEquals("/optional", TestRoutes.OptionalSegment().toResourcePath(testRoutesSerializer))
         assertEquals(
             TestRoutes.OptionalSegment(),
@@ -101,7 +114,7 @@ class ResourcePathsTest {
     }
 
     @Test
-    fun sealedDisambiguationByStaticSegment() {
+    fun `sealed routes disambiguate by static segments`() {
         assertEquals(TestRoutes.UsersList, fromResourcePath("/users", testRoutesSerializer))
         assertEquals(
             TestRoutes.UserDetail(42),
@@ -110,27 +123,52 @@ class ResourcePathsTest {
     }
 
     @Test
-    fun nestedResourceRoundTrip() {
+    fun `nested resources round-trip`() {
         val route = NestedUsers.ById(id = 7)
         assertEquals("/users/7", route.toResourcePath(nestedByIdSerializer))
         assertEquals(7, fromResourcePath("/users/7", nestedByIdSerializer)?.id)
     }
 
     @Test
-    fun normalizeResourceLocationStableQuery() {
+    fun `normalization keeps query encoding stable`() {
         val encoded = TestRoutes.Child("value").toResourcePath(testRoutesSerializer)
         assertEquals(encoded, normalizeResourceLocation(encoded))
     }
 
     @Test
-    fun unknownLocationReturnsNull() {
+    fun `unknown locations return null`() {
         assertNull(fromResourcePath("/does-not-exist", testRoutesSerializer))
     }
 
     @Test
-    fun splitResourceLocationStripsFragment() {
+    fun `splitting strips the fragment`() {
         val (path, query) = splitResourceLocation("/a/b?c=1#section")
         assertEquals("/a/b", path)
         assertEquals("c=1", query)
+    }
+
+    @Test
+    fun `decoding rejects overlays`() {
+        assertNull(
+            decodeFromResourcePath(
+                location = "/overlay",
+                rootSerializer = OverlayTestRoutes.serializer(),
+                resourcesFormat = defaultResourcesFormat,
+                accept = { it !is OverlayNavKey },
+            )
+        )
+    }
+
+    @Test
+    fun `decoding skips rejected overlays`() {
+        assertEquals(
+            CollidingTestRoutes.AddressableCandidate,
+            decodeFromResourcePath(
+                location = "/colliding",
+                rootSerializer = CollidingTestRoutes.serializer(),
+                resourcesFormat = defaultResourcesFormat,
+                accept = { it !is OverlayNavKey },
+            ),
+        )
     }
 }

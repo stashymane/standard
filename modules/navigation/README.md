@@ -37,3 +37,37 @@ NavDisplay(
     onBack = { navigator.goBack() },
 )
 ```
+
+## Overlay destinations
+
+Overlay destinations are ephemeral and never addressable. Declare them with `OverlayNavKey`:
+
+```kotlin
+data class SomeDialog(val value: String) : OverlayNavKey
+```
+
+```kotlin
+navigator.navigate(SomeDialog("foo"))
+```
+
+Overlays are pushed onto the current stack and can be dismissed with `goBack()`. Navigating to any
+other route dismisses them automatically, and switching top-level stacks discards them so they never
+reappear. On the web, the URL keeps showing the last non-overlay entry, and URL/deeplink resolution
+never produces an overlay route.
+
+To render an overlay above the current screen, you may use Navigation3's overlay scene support, e.g.:
+
+```kotlin
+NavDisplay(
+    // ...
+    sceneStrategies = listOf(DialogSceneStrategy()),
+    entryProvider = entryProvider {
+        entry<Route.ShareSheet>(metadata = DialogSceneStrategy.dialog()) { key ->
+            SomeDialogContent(key.value, onClose = { navigator.goBack() })
+        }
+    },
+)
+```
+
+Note that Navigation3 does not apply scene decorators to overlay scenes, so `LocalNavigator` is not available
+inside content rendered by `DialogSceneStrategy`.

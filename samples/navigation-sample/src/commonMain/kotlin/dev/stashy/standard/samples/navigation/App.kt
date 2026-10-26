@@ -5,27 +5,36 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import dev.stashy.navigation.compose.*
+import dev.stashy.navigation.compose.rememberEntryStateNavEntryDecorator
+import dev.stashy.navigation.compose.rememberNavigationState
+import dev.stashy.navigation.compose.rememberNavigator
 import dev.stashy.navigation.ui.rememberNavigatorSceneDecorator
+import dev.stashy.standard.samples.navigation.components.BottomBar
+import dev.stashy.standard.samples.navigation.scene.ModalBottomSheetSceneStrategy
+import dev.stashy.standard.samples.navigation.screens.ArticleScreen
+import dev.stashy.standard.samples.navigation.screens.HomeScreen
+import dev.stashy.standard.samples.navigation.screens.ProfileScreen
+import dev.stashy.standard.samples.navigation.screens.SearchResultsScreen
+import dev.stashy.standard.samples.navigation.screens.SearchScreen
+import dev.stashy.standard.samples.navigation.screens.ShareSheetScreen
 
 private val topLevelRoutes = setOf<NavKey>(Route.Home, Route.Search, Route.Profile("me"))
 
@@ -72,12 +81,20 @@ fun App() {
                     sceneDecoratorStrategies = listOf(
                         rememberNavigatorSceneDecorator(navigator),
                     ),
+                    sceneStrategies = remember {
+                        listOf(ModalBottomSheetSceneStrategy())
+                    },
                     entryProvider = entryProvider {
                         entry<Route.Home> { HomeScreen() }
                         entry<Route.Search> { SearchScreen() }
                         entry<Route.SearchResults> { key -> SearchResultsScreen(key.query) }
                         entry<Route.Profile> { key -> ProfileScreen(key.id) }
                         entry<Route.Article> { key -> ArticleScreen(key.slug) }
+                        entry<Route.ShareSheet>(
+                            metadata = ModalBottomSheetSceneStrategy.bottomSheet()
+                        ) { key ->
+                            ShareSheetScreen(key.slug, onClose = { navigator.goBack() })
+                        }
                     },
                     onBack = { navigator.goBack() },
                     transitionSpec = {
@@ -86,141 +103,5 @@ fun App() {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun BottomBar(
-    current: NavKey,
-    onSelect: (NavKey) -> Unit,
-) {
-    NavigationBar {
-        NavigationBarItem(
-            selected = current == Route.Home,
-            onClick = { onSelect(Route.Home) },
-            icon = { Text("H") },
-            label = { Text("Home") },
-        )
-        NavigationBarItem(
-            selected = current == Route.Search,
-            onClick = { onSelect(Route.Search) },
-            icon = { Text("S") },
-            label = { Text("Search") },
-        )
-        NavigationBarItem(
-            selected = current is Route.Profile,
-            onClick = { onSelect(Route.Profile("me")) },
-            icon = { Text("P") },
-            label = { Text("Profile") },
-        )
-    }
-}
-
-@Composable
-private fun HomeScreen() {
-    val navigator = LocalNavigator.current
-    val articles = remember {
-        listOf(
-            "intro" to "Introduction to Navigation",
-            "compose" to "Compose for Web",
-            "state" to "Managing State",
-            "animations" to "Navigation Animations",
-            "deep-links" to "Deep Linking",
-        )
-    }
-
-    Screen(title = "Home") {
-        Text("Featured articles", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-            items(articles) { (slug, title) ->
-                Card(
-                    onClick = { navigator.navigate(Route.Article(slug)) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) {
-                    Text(title, modifier = Modifier.padding(16.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchScreen() {
-    val navigator = LocalNavigator.current
-    var query by rememberNavEntryState { "" }
-    val submit = { if (query.isNotBlank()) navigator.navigate(Route.SearchResults(query)) }
-
-    Screen(title = "Search") {
-        TextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("Query") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { submit() }),
-        )
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = submit,
-            enabled = query.isNotBlank(),
-        ) {
-            Text("Search")
-        }
-    }
-}
-
-@Composable
-private fun SearchResultsScreen(query: String) {
-    val navigator = LocalNavigator.current
-    val results = remember(query) { List(5) { "$query result ${it + 1}" } }
-
-    Screen(title = "Results for \"$query\"") {
-        LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-            items(results) { result ->
-                Card(
-                    onClick = { navigator.navigate(Route.Article(result.replace(" ", "-"))) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                ) {
-                    Text(result, modifier = Modifier.padding(16.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileScreen(id: String) {
-    val navigator = LocalNavigator.current
-
-    Screen(title = "Profile: $id") {
-        Text("Profile details for user $id.")
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = { navigator.navigate(Route.Article("profile-$id")) }) {
-            Text("View featured article")
-        }
-    }
-}
-
-@Composable
-private fun ArticleScreen(slug: String) {
-    Screen(title = "Article: $slug") {
-        Text("This is the article with slug \"$slug\".")
-    }
-}
-
-@Composable
-private fun Screen(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(16.dp))
-        content()
     }
 }

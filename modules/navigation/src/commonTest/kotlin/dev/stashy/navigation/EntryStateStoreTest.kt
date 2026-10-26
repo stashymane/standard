@@ -7,7 +7,7 @@ import kotlin.test.assertNull
 
 class EntryStateStoreTest {
     @Test
-    fun setGetRemoveAndSnapshotRoundTrip() {
+    fun `entry state round-trips through snapshots`() {
         val store = EntryStateStore()
         store.setString("entry-a", "field", "\"hello\"")
         assertEquals("\"hello\"", store.getString("entry-a", "field"))
@@ -25,12 +25,14 @@ class EntryStateStoreTest {
     }
 
     @Test
-    fun decodeFailureReturnsNull() {
-        assertNull(NavDefaults.json.decodeFromString("not-json"))
+    fun `decoding invalid JSON returns null`() {
+        val decoded =
+            runCatching { NavDefaults.json.decodeFromString<String>("not-json") }.getOrNull()
+        assertNull(decoded)
     }
 
     @Test
-    fun removeClearsAllKeysForEntry() {
+    fun `remove clears all entry keys`() {
         val store = EntryStateStore()
         store.setString("entry", "a", "1")
         store.setString("entry", "b", "2")

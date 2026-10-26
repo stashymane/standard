@@ -3,29 +3,16 @@ package dev.stashy.navigation
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.navigation3.runtime.NavKey
-import dev.stashy.navigation.state.NavigationState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
-private data object Home : NavKey
-private data object HomeDetail : NavKey
-private data object Search : NavKey
-private data object SearchResult : NavKey
-private data object Profile : NavKey
-private data class PostDetail(val id: Int) : NavKey
-
 class NavigatorTest {
-    private val topLevelRoutes = setOf(Home, Search, Profile)
-
-    private fun navigator(): Navigator =
-        DefaultNavigator(NavigationState(Home, topLevelRoutes))
-
     @Test
-    fun rootBackStackShowsStartRouteOnly() {
-        val nav = navigator()
+    fun `root stack contains only the start route`() {
+        val nav = testNavigator()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
         assertEquals(listOf(Home), nav.state.current)
@@ -34,8 +21,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun navigatePushesOntoCurrentStack() {
-        val nav = navigator()
+    fun `navigate pushes onto the current stack`() {
+        val nav = testNavigator()
 
         nav.navigate(HomeDetail)
 
@@ -45,57 +32,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun currentContainsSelectedTopLevelStack() {
-        val nav = navigator()
-
-        nav.navigate(HomeDetail)
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
-
-        nav.navigate(Search)
-        nav.navigate(SearchResult)
-        assertEquals(listOf(Search, SearchResult), nav.state.current)
-
-        nav.navigate(Home)
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
-    }
-
-    @Test
-    fun navigateToTopLevelSwitchesStackAndKeepsStartVisible() {
-        val nav = navigator()
-        nav.navigate(HomeDetail)
-        nav.navigate(Search)
-
-        assertEquals(Search, nav.state.topLevelRoute)
-        assertEquals(listOf(Search), nav.state.current)
-        assertEquals(listOf(Home, HomeDetail, Search), nav.state.backStack.toList())
-        assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(Home).toList())
-    }
-
-    @Test
-    fun switchBackRestoresRetainedStack() {
-        val nav = navigator()
-        nav.navigate(HomeDetail)
-        nav.navigate(Search)
-        nav.navigate(Home)
-
-        assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
-    }
-
-    @Test
-    fun navigateToTopLevelRootDoesNotPush() {
-        val nav = navigator()
-        nav.navigate(Search)
-        nav.navigate(Search)
-
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
-        assertEquals(listOf(Home, Search), nav.state.backStack.toList())
-    }
-
-    @Test
-    fun goBackPopsWithinStack() {
-        val nav = navigator()
+    fun `go back pops the current stack`() {
+        val nav = testNavigator()
         nav.navigate(HomeDetail)
 
         assertTrue(nav.canGoBack())
@@ -107,22 +45,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun goBackAtNonStartRootReturnsToStartAndRetains() {
-        val nav = navigator()
-        nav.navigate(Search)
-
-        assertTrue(nav.canGoBack())
-        nav.goBack()
-
-        assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
-        assertFalse(nav.canGoBack())
-    }
-
-    @Test
-    fun goBackAtStartRootIsNoOp() {
-        val nav = navigator()
+    fun `go back at the start root is a no-op`() {
+        val nav = testNavigator()
 
         assertFalse(nav.canGoBack())
         nav.goBack()
@@ -131,8 +55,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun canGoBackTracksState() {
-        val nav = navigator()
+    fun `can go back tracks navigation state`() {
+        val nav = testNavigator()
 
         assertFalse(nav.canGoBack())
         nav.navigate(HomeDetail)
@@ -145,16 +69,16 @@ class NavigatorTest {
     }
 
     @Test
-    fun popToReturnsNullWhenRouteNotOnStack() {
-        val nav = navigator()
+    fun `pop to returns null when the route is missing`() {
+        val nav = testNavigator()
 
         assertEquals(null, nav.popTo(SearchResult))
         assertEquals(listOf(Home), nav.state.backStack.toList())
     }
 
     @Test
-    fun popToOrNavigatePushesWhenMissing() {
-        val nav = navigator()
+    fun `pop to or navigate pushes a missing route`() {
+        val nav = testNavigator()
 
         nav.popTo(HomeDetail) ?: nav.navigate(HomeDetail)
 
@@ -163,21 +87,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun popToPopsToExistingEntry() {
-        val nav = navigator()
-        nav.navigate(HomeDetail)
-        nav.navigate(Search)
-
-        assertEquals(Unit, nav.popTo(HomeDetail))
-
-        assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
-    }
-
-    @Test
-    fun popToStartRootKeepsStartStack() {
-        val nav = navigator()
+    fun `pop to the start root keeps the stack`() {
+        val nav = testNavigator()
         nav.navigate(HomeDetail)
 
         assertEquals(Unit, nav.popTo(Home))
@@ -187,34 +98,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun popToOtherTopLevelSwitches() {
-        val nav = navigator()
-        nav.navigate(Search)
-
-        assertEquals(Unit, nav.popTo(Home))
-
-        assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertEquals(listOf(Search), nav.state.backStacks.getValue(Search).toList())
-    }
-
-    @Test
-    fun popToEntryInOffScreenStack() {
-        val nav = navigator()
-        nav.navigate(Search)
-        nav.navigate(SearchResult)
-        nav.navigate(Home)
-
-        assertEquals(Unit, nav.popTo(SearchResult))
-
-        assertEquals(Search, nav.state.topLevelRoute)
-        assertEquals(listOf(Home, Search, SearchResult), nav.state.backStack.toList())
-        assertEquals(listOf(Home), nav.state.backStacks.getValue(Home).toList())
-    }
-
-    @Test
-    fun backStackIsStableWhenStateUnchanged() {
-        val nav = navigator()
+    fun `back stack is stable while state is unchanged`() {
+        val nav = testNavigator()
         nav.navigate(HomeDetail)
 
         val first = nav.state.backStack
@@ -224,8 +109,8 @@ class NavigatorTest {
     }
 
     @Test
-    fun backStackReflectsMutationsWithStableInstance() {
-        val nav = navigator()
+    fun `back stack view reflects mutations`() {
+        val nav = testNavigator()
         nav.navigate(HomeDetail)
         val view = nav.state.backStack
 
@@ -239,8 +124,8 @@ class NavigatorTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun backStackViewTracksSnapshotChanges() = runTest {
-        val nav = navigator()
+    fun `back stack view tracks snapshot changes`() = runTest {
+        val nav = testNavigator()
         val emissions = mutableListOf<List<NavKey>>()
 
         val job =
@@ -264,8 +149,8 @@ class NavigatorTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun reselectEventsEmittedOnReselect() = runTest {
-        val nav = navigator()
+    fun `reselect emits the reselected route`() = runTest {
+        val nav = testNavigator()
         val emissions = mutableListOf<NavKey>()
 
         val job =

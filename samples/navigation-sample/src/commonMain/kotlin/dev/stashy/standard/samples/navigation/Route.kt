@@ -1,6 +1,7 @@
 package dev.stashy.standard.samples.navigation
 
 import androidx.navigation3.runtime.NavKey
+import dev.stashy.navigation.OverlayNavKey
 import io.ktor.resources.*
 import kotlinx.serialization.Serializable
 
@@ -25,4 +26,6 @@ sealed class Route : NavKey {
     @Resource("/article/{slug}")
     @Serializable
     data class Article(val slug: String) : Route()
+
+    data class ShareSheet(val slug: String) : Route(), OverlayNavKey
 }

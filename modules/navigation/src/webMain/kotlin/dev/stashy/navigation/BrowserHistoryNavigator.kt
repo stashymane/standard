@@ -28,6 +28,11 @@ internal class BrowserHistoryNavigator(
     private fun currentLocation(): String =
         normalizeResourceLocation(window.location.pathname + window.location.search)
 
+    private fun urlPath(): String = pathOf(state.lastNonOverlayRoute())
+
+    private fun resolveLocation(location: String): NavKey =
+        parsePath(location).takeUnless { it is OverlayNavKey } ?: state.lastNonOverlayRoute()
+
     private fun historyStatePayload(): String =
         encodeEntryStateSnapshot(state.entryStates.snapshot())
 
@@ -38,6 +43,8 @@ internal class BrowserHistoryNavigator(
         writeHistoryPushState(historyStatePayload(), path)
 
     private fun applyHistoryEntry(route: NavKey) {
+        state.discardOverlays()
+
         if (route in state.backStacks.keys) {
             state.topLevelRoute = route
             val stack = state.backStacks.getValue(route)
@@ -55,9 +62,9 @@ internal class BrowserHistoryNavigator(
         popStateListener = listener
         window.addEventListener("popstate", listener)
 
-        val initial = parsePath(currentLocation())
+        val initial = resolveLocation(currentLocation())
         applyHistoryEntry(initial)
-        val path = pathOf(state.backStack.last())
+        val path = urlPath()
         val startPath = normalizeResourceLocation(pathOf(state.startRoute))
 
         pathHistory.clear()
@@ -83,7 +90,7 @@ internal class BrowserHistoryNavigator(
         state.entryStates.changes
             .debounce(HISTORY_DEBOUNCE_MS.milliseconds)
             .collect {
-                val path = pathOf(state.backStack.last())
+                val path = urlPath()
                 if (normalizeResourceLocation(path) == currentLocation()) {
                     replaceState(path)
                     pathHistory[historyIndex] = path
@@ -93,7 +100,7 @@ internal class BrowserHistoryNavigator(
 
     private fun handlePopState(event: Event) {
         state.entryStates.restore(decodeEntryStateSnapshot(readPopStatePayload(event)))
-        applyHistoryEntry(parsePath(currentLocation()))
+        applyHistoryEntry(resolveLocation(currentLocation()))
         syncHistoryIndexToCurrentPath()
     }
 
@@ -117,21 +124,34 @@ internal class BrowserHistoryNavigator(
 
     override fun navigate(route: NavKey) {
         backing.popTo(route) ?: backing.navigate(route)
-        pushHistory(pathOf(state.backStack.last()))
+        if (route is OverlayNavKey) return
+        pushHistory(urlPath())
     }
 
     override fun goBack() {
         if (!canGoBack()) return
+        if (state.backStack.lastOrNull() is OverlayNavKey) {
+            backing.goBack()
+            return
+        }
         val startPath = normalizeResourceLocation(pathOf(state.startRoute))
         if (historyIndex > 0 || currentLocation() != startPath) {
             window.history.go(-1)
         } else {
             backing.goBack()
-            replaceState(pathOf(state.backStack.last()))
+            replaceState(urlPath())
         }
     }
 
     override fun popTo(route: NavKey): Unit? {
+        if (route is OverlayNavKey) {
+            val result = backing.popTo(route)
+            if (result == null) {
+                backing.navigate(route)
+            }
+            return result
+        }
+
         val targetPath = pathOf(route)
         val index = pathHistory.lastIndexOf(targetPath)
 
@@ -144,7 +164,7 @@ internal class BrowserHistoryNavigator(
         if (result == null) {
             backing.navigate(route)
         }
-        pushHistory(pathOf(state.backStack.last()))
+        pushHistory(urlPath())
         return result
     }
 

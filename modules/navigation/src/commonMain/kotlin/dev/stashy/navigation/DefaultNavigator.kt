@@ -15,6 +15,10 @@ public class DefaultNavigator(
         field = MutableSharedFlow<NavKey>(extraBufferCapacity = 1)
 
     override fun navigate(route: NavKey) {
+        if (route !is OverlayNavKey) {
+            state.discardOverlays()
+        }
+
         if (route in state.backStacks.keys) {
             state.topLevelRoute = route
             return
@@ -33,6 +37,11 @@ public class DefaultNavigator(
 
     override fun goBack() {
         val stack = state.backStacks.getValue(state.topLevelRoute)
+        if (stack.lastOrNull() is OverlayNavKey) {
+            stack.removeLastOrNull()
+            return
+        }
+
         if (stack.size > 1) {
             stack.removeLastOrNull()
             return
@@ -48,6 +57,19 @@ public class DefaultNavigator(
     }
 
     override fun popTo(route: NavKey): Unit? {
+        if (route is OverlayNavKey) {
+            val stack = state.backStacks.getValue(state.topLevelRoute)
+            val index = stack.lastIndexOf(route)
+            if (index < 0) return null
+
+            while (stack.lastIndex > index) {
+                stack.removeLastOrNull()
+            }
+            return Unit
+        }
+
+        state.discardOverlays()
+
         if (route in state.backStacks.keys) {
             state.topLevelRoute = route
             return Unit

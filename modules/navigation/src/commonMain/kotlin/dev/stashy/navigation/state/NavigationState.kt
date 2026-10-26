@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
+import dev.stashy.navigation.OverlayNavKey
 import dev.stashy.navigation.util.StableSnapshotListView
 
 /**
@@ -26,6 +27,9 @@ public class NavigationState(
     init {
         require(startRoute in topLevelRoutes) {
             "startRoute ($startRoute) must be in topLevelRoutes"
+        }
+        topLevelRoutes.filterIsInstance<OverlayNavKey>().let { overlays ->
+            require(overlays.isEmpty()) { "Overlays cannot be top level routes: $overlays" }
         }
     }
 
@@ -71,4 +75,24 @@ public class NavigationState(
      * The current top-level route's back stack.
      */
     public val current: List<NavKey> = StableSnapshotListView { currentSnapshot }
+
+    /**
+     * Removes all overlay routes from retained stacks.
+     *
+     * Overlays are only valid as a contiguous suffix of the current top-level stack, so this keeps
+     * them from surviving stack switches.
+     */
+    internal fun discardOverlays() {
+        backStacks.values.forEach { stack ->
+            while (stack.lastOrNull() is OverlayNavKey) {
+                stack.removeLastOrNull()
+            }
+        }
+    }
+
+    /**
+     * The most recent visible route that is not an [OverlayNavKey].
+     */
+    internal fun lastNonOverlayRoute(): NavKey =
+        backStack.lastOrNull { it !is OverlayNavKey } ?: startRoute
 }

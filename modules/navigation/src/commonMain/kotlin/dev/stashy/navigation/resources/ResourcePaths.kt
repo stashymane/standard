@@ -75,6 +75,7 @@ internal fun decodeFromResourcePath(
     location: String,
     rootSerializer: KSerializer<*>,
     resourcesFormat: ResourcesFormat,
+    accept: (Any) -> Boolean = { true },
 ): Any? {
     val (path, query) = splitResourceLocation(location)
     val normalizedPath = normalizeResourcePath(path)
@@ -94,7 +95,7 @@ internal fun decodeFromResourcePath(
         val merged = mergeResourceParameters(pathParams, queryParams)
         runCatching {
             resourcesFormat.decodeFromParameters(child, merged)
-        }.getOrNull()
+        }.getOrNull()?.takeIf(accept)
     }
 }
 

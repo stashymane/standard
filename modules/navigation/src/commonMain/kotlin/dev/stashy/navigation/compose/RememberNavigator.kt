@@ -3,8 +3,9 @@ package dev.stashy.navigation.compose
 import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.Navigator
+import dev.stashy.navigation.OverlayNavKey
+import dev.stashy.navigation.resources.decodeFromResourcePath
 import dev.stashy.navigation.resources.defaultResourcesFormat
-import dev.stashy.navigation.resources.fromResourcePath
 import dev.stashy.navigation.resources.toResourcePath
 import dev.stashy.navigation.state.NavigationState
 import io.ktor.resources.serialization.*
@@ -37,10 +38,19 @@ public inline fun <reified Entry : NavKey> rememberNavigator(
 ): Navigator = rememberNavigator(
     state = state,
     pathOf = { destination ->
+        check(destination !is OverlayNavKey) {
+            "Overlay routes do not have URL paths: $destination"
+        }
         (destination as Entry).toResourcePath(serializer<Entry>(), resourcesFormat)
     },
     parsePath = { location ->
-        fromResourcePath(location, serializer<Entry>(), resourcesFormat)
-            ?: state.backStack.last()
+        val route =
+            decodeFromResourcePath(
+                location = location,
+                rootSerializer = serializer<Entry>(),
+                resourcesFormat = resourcesFormat,
+                accept = { candidate -> candidate is Entry && candidate !is OverlayNavKey },
+            ) as? Entry
+        route ?: state.backStack.lastOrNull { it !is OverlayNavKey } ?: state.startRoute
     },
 )

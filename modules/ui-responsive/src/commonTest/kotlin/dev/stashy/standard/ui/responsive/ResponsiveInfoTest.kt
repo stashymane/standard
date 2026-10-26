@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 
 class ResponsiveInfoTest {
     @Test
-    fun widthExtraSmallBreakpoint() {
+    fun `width extra small breakpoint starts at 480`() {
         assertTrue(WidthSize(479) < ContainerSize.ExtraSmall)
         assertFalse(WidthSize(479) >= ContainerSize.ExtraSmall)
         assertTrue(WidthSize(480) >= ContainerSize.ExtraSmall)
@@ -14,7 +14,7 @@ class ResponsiveInfoTest {
     }
 
     @Test
-    fun widthSmallBreakpoint() {
+    fun `width small breakpoint starts at 600`() {
         assertTrue(WidthSize(599) < ContainerSize.Small)
         assertFalse(WidthSize(599) >= ContainerSize.Small)
         assertTrue(WidthSize(600) >= ContainerSize.Small)
@@ -22,20 +22,20 @@ class ResponsiveInfoTest {
     }
 
     @Test
-    fun widthMediumBreakpoint() {
+    fun `width medium breakpoint starts at 840`() {
         assertTrue(WidthSize(839) < ContainerSize.Medium)
         assertTrue(WidthSize(840) >= ContainerSize.Medium)
     }
 
     @Test
-    fun widthLargeBreakpoint() {
+    fun `width large and desktop start at 1200 and 1600`() {
         assertTrue(WidthSize(1199) < ContainerSize.Large)
         assertTrue(WidthSize(1200) >= ContainerSize.Large)
         assertTrue(WidthSize(1600) >= ContainerSize.Desktop)
     }
 
     @Test
-    fun heightExtraSmallAndSmallShareBound() {
+    fun `height extra small and small share 480`() {
         assertTrue(HeightSize(479) < ContainerSize.ExtraSmall)
         assertTrue(HeightSize(479) < ContainerSize.Small)
         assertTrue(HeightSize(480) >= ContainerSize.ExtraSmall)
@@ -43,13 +43,13 @@ class ResponsiveInfoTest {
     }
 
     @Test
-    fun heightMediumBreakpoint() {
+    fun `height medium breakpoint starts at 900`() {
         assertTrue(HeightSize(899) < ContainerSize.Medium)
         assertTrue(HeightSize(900) >= ContainerSize.Medium)
     }
 
     @Test
-    fun heightLargeAndDesktopShareMediumBound() {
+    fun `height large and desktop share 900`() {
         assertTrue(HeightSize(899) < ContainerSize.Large)
         assertTrue(HeightSize(899) < ContainerSize.Desktop)
         assertTrue(HeightSize(900) >= ContainerSize.Large)
@@ -57,7 +57,7 @@ class ResponsiveInfoTest {
     }
 
     @Test
-    fun sameNumericSizeDiffersByAxisAtSmall() {
+    fun `same size differs by axis at small`() {
         // Width Small is 600dp; height Small is 480dp.
         val size = 500
         assertTrue(WidthSize(size) < ContainerSize.Small)
@@ -65,7 +65,7 @@ class ResponsiveInfoTest {
     }
 
     @Test
-    fun bothAxesComparisonRequiresBothAxes() {
+    fun `comparison requires both axes`() {
         val bothSmall = ResponsiveInfo(WidthSize(600), HeightSize(480))
         assertTrue(bothSmall >= ContainerSize.Small)
         assertTrue(bothSmall >= ContainerSize.ExtraSmall)

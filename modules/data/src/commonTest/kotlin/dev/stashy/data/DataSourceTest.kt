@@ -7,7 +7,7 @@ import kotlin.test.*
 
 class DataSourceTest {
     @Test
-    fun dataSourceDoesNotCacheByDefault() = runTest {
+    fun `data sources do not cache by default`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
@@ -21,7 +21,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun cachedStoresSuccessfulResult() = runTest {
+    fun `caching stores successful results`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
@@ -35,7 +35,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun mapDoesNotCacheIntermediateResult() = runTest {
+    fun `mapping does not cache intermediate results`() = runTest {
         var loads = 0
         var maps = 0
         val source = dataSource {
@@ -54,7 +54,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun cachedCachesFinalMappedResultOnly() = runTest {
+    fun `cached map stores only the final result`() = runTest {
         var loads = 0
         var maps = 0
         val source = dataSource {
@@ -73,7 +73,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun failureDoesNotCacheAndClearsInFlight() = runTest {
+    fun `failure clears the in-flight load`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
@@ -94,7 +94,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun awaitAfterFailureRetriesAndCachesSuccess() = runTest {
+    fun `awaiting after failure retries and caches`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
@@ -115,7 +115,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun mapFailureDoesNotCacheAndRetries() = runTest {
+    fun `map failure retries without caching`() = runTest {
         var loads = 0
         var maps = 0
         val source = dataSource {
@@ -141,7 +141,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun concurrentAwaitCoalescesInFlightLoad() = runTest {
+    fun `concurrent awaits share one load`() = runTest {
         var loads = 0
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
@@ -167,7 +167,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun preloadWarmsCachedSource() = runTest {
+    fun `preload warms the cache`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
@@ -184,7 +184,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun preloadFailureIsSwallowedAndAllowsRetry() = runTest {
+    fun `preload failure is swallowed`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
@@ -202,7 +202,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun concurrentAwaitFailurePropagatesAndAllowsRetry() = runTest {
+    fun `concurrent failure propagates and allows retry`() = runTest {
         var loads = 0
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
@@ -238,7 +238,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun awaitRethrowsCancellationInsteadOfWrapping() = runTest {
+    fun `await rethrows cancellation`() = runTest {
         val source = dataSource<String> {
             throw CancellationException("gone")
         }
@@ -248,7 +248,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun cancellationClearsInFlightAndAllowsRetry() = runTest {
+    fun `cancellation clears the in-flight load`() = runTest {
         var loads = 0
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
@@ -275,7 +275,7 @@ class DataSourceTest {
     }
 
     @Test
-    fun cancellationPropagatesToConcurrentAwaitersAndAllowsRetry() = runTest {
+    fun `cancellation reaches concurrent awaiters`() = runTest {
         var loads = 0
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()

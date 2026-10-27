@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
-import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
@@ -24,7 +23,7 @@ import dev.stashy.standard.samples.navigation.components.BreadcrumbBar
 import dev.stashy.standard.samples.navigation.scene.ModalBottomSheetSceneStrategy
 import dev.stashy.standard.samples.navigation.screens.*
 
-private val topLevelRoutes = setOf<NavKey>(Route.Home, Route.Search, Route.Profile("me"))
+private val topLevelRoutes: Set<Route> = setOf(Route.Home, Route.Search, Route.Profile("me"))
 
 @Composable
 fun App() {
@@ -56,8 +55,9 @@ fun App() {
             },
             bottomBar = {
                 BottomBar(
-                    current = state.current.firstOrNull { it in topLevelRoutes }
-                        ?: state.startRoute,
+                    current = state.currentStack.firstOrNull { route ->
+                        topLevelRoutes.any { it == route }
+                    } ?: state.startRoute,
                     onSelect = { navigator.navigate(it) },
                 )
             },

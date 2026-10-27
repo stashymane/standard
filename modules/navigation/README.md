@@ -1,16 +1,26 @@
 # navigation
 
+Provides a backstack implementation, web URL support & storing data in web state.
+
 ## Usage
 
 ```kotlin
+@Serializable
 sealed class Route : NavKey {
+    @Resource("/")
     data object Home : Route()
+
+    @Resource("search")
     data object Search : Route()
+
+    @Resource("profile")
     data class Profile(val id: String) : Route()
+
+    @Resource("article")
     data class Article(val slug: String) : Route()
 }
 
-val topLevelRoutes = setOf<NavKey>(Route.Home, Route.Search, Route.Profile("me"))
+val topLevelRoutes: Set<Route> = setOf(Route.Home, Route.Search, Route.Profile("me"))
 
 val state = rememberNavigationState(
     startRoute = Route.Home,
@@ -37,6 +47,9 @@ NavDisplay(
     onBack = { navigator.goBack() },
 )
 ```
+
+The overload above uses the generated serializer for `Route`. Pass a `KSerializer<NavKey>` explicitly
+when the top-level routes do not share a single serializable hierarchy.
 
 ## Overlay destinations
 

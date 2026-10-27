@@ -1,5 +1,7 @@
 package dev.stashy.navigation
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.state.NavigationState
 
@@ -13,5 +15,14 @@ internal data class Share(val id: Int) : OverlayNavKey
 
 internal val testTopLevelRoutes: Set<NavKey> = setOf(Home, Search, Profile)
 
-internal fun testNavigator(): Navigator =
-    DefaultNavigator(NavigationState(Home, testTopLevelRoutes))
+internal fun testState(
+    startRoute: NavKey = Home,
+    topLevelRoutes: Set<NavKey> = testTopLevelRoutes,
+): NavigationState =
+    NavigationState(
+        startRoute = startRoute,
+        topLevelRoute = mutableStateOf(startRoute),
+        backStacks = topLevelRoutes.associateWith { NavBackStack<NavKey>(it) },
+    )
+
+internal fun testNavigator(): Navigator = DefaultNavigator(testState())

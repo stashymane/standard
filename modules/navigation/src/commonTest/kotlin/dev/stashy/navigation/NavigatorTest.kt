@@ -7,7 +7,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class NavigatorTest {
     @Test
@@ -15,7 +18,7 @@ class NavigatorTest {
         val nav = testNavigator()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertEquals(listOf(Home), nav.state.current)
+        assertEquals(listOf(Home), nav.state.currentStack)
         assertEquals(Home, nav.state.topLevelRoute)
         assertFalse(nav.canGoBack())
     }
@@ -27,7 +30,7 @@ class NavigatorTest {
         nav.navigate(HomeDetail)
 
         assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
         assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
     }
 
@@ -40,7 +43,7 @@ class NavigatorTest {
         nav.goBack()
 
         assertEquals(listOf(Home), nav.state.backStack.toList())
-        assertEquals(listOf(Home), nav.state.current)
+        assertEquals(listOf(Home), nav.state.currentStack)
         assertFalse(nav.canGoBack())
     }
 
@@ -98,33 +101,20 @@ class NavigatorTest {
     }
 
     @Test
-    fun `back stack is stable while state is unchanged`() {
+    fun `back stack reflects mutations`() {
         val nav = testNavigator()
         nav.navigate(HomeDetail)
-
-        val first = nav.state.backStack
-        val second = nav.state.backStack
-
-        assertSame(first, second)
-    }
-
-    @Test
-    fun `back stack view reflects mutations`() {
-        val nav = testNavigator()
-        nav.navigate(HomeDetail)
-        val view = nav.state.backStack
 
         Snapshot.withMutableSnapshot {
             nav.navigate(Search)
         }
 
-        assertSame(view, nav.state.backStack)
         assertEquals(listOf(Home, HomeDetail, Search), nav.state.backStack.toList())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `back stack view tracks snapshot changes`() = runTest {
+    fun `back stack tracks snapshot changes`() = runTest {
         val nav = testNavigator()
         val emissions = mutableListOf<List<NavKey>>()
 

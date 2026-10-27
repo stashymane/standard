@@ -1,6 +1,5 @@
 package dev.stashy.navigation
 
-import dev.stashy.navigation.state.NavigationState
 import kotlin.test.*
 
 class NavigatorOverlayTest {
@@ -11,7 +10,7 @@ class NavigatorOverlayTest {
         nav.navigate(Share(1))
 
         assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home, Share(1)), nav.state.current)
+        assertEquals(listOf(Home, Share(1)), nav.state.currentStack)
         assertEquals(listOf(Home, Share(1)), nav.state.backStack.toList())
         assertTrue(nav.canGoBack())
     }
@@ -24,7 +23,7 @@ class NavigatorOverlayTest {
 
         nav.goBack()
 
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
         assertEquals(listOf(Home, HomeDetail), nav.state.backStack.toList())
         assertTrue(nav.canGoBack())
     }
@@ -35,13 +34,13 @@ class NavigatorOverlayTest {
         nav.navigate(Share(1))
         nav.navigate(Share(2))
 
-        assertEquals(listOf(Home, Share(1), Share(2)), nav.state.current)
+        assertEquals(listOf(Home, Share(1), Share(2)), nav.state.currentStack)
 
         nav.goBack()
-        assertEquals(listOf(Home, Share(1)), nav.state.current)
+        assertEquals(listOf(Home, Share(1)), nav.state.currentStack)
 
         nav.goBack()
-        assertEquals(listOf(Home), nav.state.current)
+        assertEquals(listOf(Home), nav.state.currentStack)
         assertFalse(nav.canGoBack())
     }
 
@@ -51,7 +50,7 @@ class NavigatorOverlayTest {
         nav.navigate(Share(1))
         nav.navigate(HomeDetail)
 
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
     }
 
     @Test
@@ -62,7 +61,7 @@ class NavigatorOverlayTest {
         nav.navigate(Search)
 
         assertEquals(Search, nav.state.topLevelRoute)
-        assertEquals(listOf(Search), nav.state.current)
+        assertEquals(listOf(Search), nav.state.currentStack)
         assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(Home).toList())
     }
 
@@ -74,7 +73,7 @@ class NavigatorOverlayTest {
         nav.navigate(Home)
 
         assertEquals(Home, nav.state.topLevelRoute)
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
     }
 
     @Test
@@ -85,7 +84,7 @@ class NavigatorOverlayTest {
         nav.navigate(Home)
         nav.navigate(Search)
 
-        assertEquals(listOf(Search), nav.state.current)
+        assertEquals(listOf(Search), nav.state.currentStack)
     }
 
     @Test
@@ -95,7 +94,7 @@ class NavigatorOverlayTest {
         nav.navigate(Search)
         nav.navigate(Home)
 
-        assertEquals(listOf(Home), nav.state.current)
+        assertEquals(listOf(Home), nav.state.currentStack)
         assertFalse(nav.canGoBack())
     }
 
@@ -108,7 +107,7 @@ class NavigatorOverlayTest {
 
         assertEquals(Unit, nav.popTo(Share(1)))
 
-        assertEquals(listOf(Home, HomeDetail, Share(1)), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail, Share(1)), nav.state.currentStack)
     }
 
     @Test
@@ -119,7 +118,7 @@ class NavigatorOverlayTest {
 
         assertEquals(Unit, nav.popTo(HomeDetail))
 
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
     }
 
     @Test
@@ -127,7 +126,7 @@ class NavigatorOverlayTest {
         val nav = testNavigator()
 
         assertEquals(null, nav.popTo(Share(1)))
-        assertEquals(listOf(Home), nav.state.current)
+        assertEquals(listOf(Home), nav.state.currentStack)
     }
 
     @Test
@@ -148,14 +147,14 @@ class NavigatorOverlayTest {
     @Test
     fun `start route cannot be an overlay`() {
         assertFailsWith<IllegalArgumentException> {
-            NavigationState(Share(1), setOf(Share(1)))
+            testState(startRoute = Share(1), topLevelRoutes = setOf(Share(1)))
         }
     }
 
     @Test
     fun `top-level routes cannot contain overlays`() {
         assertFailsWith<IllegalArgumentException> {
-            NavigationState(Home, setOf(Home, Confirm))
+            testState(topLevelRoutes = setOf(Home, Confirm))
         }
     }
 }

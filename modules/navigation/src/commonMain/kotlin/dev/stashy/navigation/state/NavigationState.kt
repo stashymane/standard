@@ -1,12 +1,11 @@
 package dev.stashy.navigation.state
 
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import dev.stashy.navigation.OverlayNavKey
-import dev.stashy.navigation.util.StableSnapshotListView
 
 /**
  * State holder for navigation.
@@ -15,66 +14,62 @@ import dev.stashy.navigation.util.StableSnapshotListView
  * start route's stack, followed by the current top-level route's stack when it differs (the
  * "exit through home" pattern).
  *
- * @param startRoute the route the user exits through; must be in [topLevelRoutes]
- * @param topLevelRoutes the top-level routes that can be switched between
+ * @param startRoute the route the user exits through; must be a key in [backStacks]
+ * @param topLevelRoute the state backing the currently selected top-level route
+ * @param backStacks the retained back stack for each top-level route
  * @param entryStates optional store for per-entry state
  */
 public class NavigationState(
     public val startRoute: NavKey,
-    topLevelRoutes: Set<NavKey>,
+    topLevelRoute: MutableState<NavKey>,
+    internal val backStacks: Map<NavKey, NavBackStack<NavKey>>,
     public val entryStates: EntryStateStore = EntryStateStore(),
 ) {
+    private val topLevelRouteState: MutableState<NavKey> = topLevelRoute
+
     init {
-        require(startRoute in topLevelRoutes) {
-            "startRoute ($startRoute) must be in topLevelRoutes"
+        require(startRoute in backStacks) {
+            "startRoute ($startRoute) must be a top-level route"
         }
-        topLevelRoutes.filterIsInstance<OverlayNavKey>().let { overlays ->
+        require(topLevelRouteState.value in backStacks) {
+            "topLevelRoute (${topLevelRouteState.value}) must be present within backStacks"
+        }
+        backStacks.keys.filterIsInstance<OverlayNavKey>().let { overlays ->
             require(overlays.isEmpty()) { "Overlays cannot be top level routes: $overlays" }
         }
     }
 
-    private val topLevelRouteState = mutableStateOf(startRoute)
-
     /**
      * The currently selected top-level route.
      */
-    internal var topLevelRoute: NavKey
+    public var topLevelRoute: NavKey
         get() = topLevelRouteState.value
         set(value) {
-            require(value in backStacks.keys) {
+            require(value in backStacks) {
                 "Cannot switch to route ($value) that is not a top-level route"
             }
             topLevelRouteState.value = value
         }
 
-    internal val backStacks: Map<NavKey, NavBackStack<NavKey>> = topLevelRoutes.associateWith { key ->
-        NavBackStack(key)
-    }
-
-    private val backStackSnapshot: List<NavKey> by derivedStateOf {
+    /**
+     * The entire currently visible back stack.
+     * This always includes the initial backStack.
+     */
+    public val backStack: List<NavKey> by derivedStateOf {
         buildList {
             addAll(backStacks.getValue(startRoute))
-            val current = topLevelRoute
+            val current = topLevelRouteState.value
             if (current != startRoute) {
                 addAll(backStacks.getValue(current))
             }
         }
     }
 
-    private val currentSnapshot: List<NavKey> by derivedStateOf {
-        val stack = backStacks.getValue(topLevelRoute)
-        stack.toList()
-    }
-
-    /**
-     * The entire currently visible back stack.
-     */
-    public val backStack: List<NavKey> = StableSnapshotListView { backStackSnapshot }
-
     /**
      * The current top-level route's back stack.
      */
-    public val current: List<NavKey> = StableSnapshotListView { currentSnapshot }
+    public val currentStack: List<NavKey>
+        get() = backStacks.getValue(topLevelRoute)
 
     /**
      * Removes all overlay routes from retained stacks.

@@ -1,6 +1,9 @@
 package dev.stashy.navigation
 
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class NavigatorStackSwitchingTest {
     @Test
@@ -8,14 +11,14 @@ class NavigatorStackSwitchingTest {
         val nav = testNavigator()
 
         nav.navigate(HomeDetail)
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
 
         nav.navigate(Search)
         nav.navigate(SearchResult)
-        assertEquals(listOf(Search, SearchResult), nav.state.current)
+        assertEquals(listOf(Search, SearchResult), nav.state.currentStack)
 
         nav.navigate(Home)
-        assertEquals(listOf(Home, HomeDetail), nav.state.current)
+        assertEquals(listOf(Home, HomeDetail), nav.state.currentStack)
     }
 
     @Test
@@ -25,7 +28,7 @@ class NavigatorStackSwitchingTest {
         nav.navigate(Search)
 
         assertEquals(Search, nav.state.topLevelRoute)
-        assertEquals(listOf(Search), nav.state.current)
+        assertEquals(listOf(Search), nav.state.currentStack)
         assertEquals(listOf(Home, HomeDetail, Search), nav.state.backStack.toList())
         assertEquals(listOf(Home, HomeDetail), nav.state.backStacks.getValue(Home).toList())
     }

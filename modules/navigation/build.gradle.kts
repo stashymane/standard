@@ -31,6 +31,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(ktorLibs.resources)
+            implementation(composeLibs.androidx.navigation3.ui)
 
             implementation(composeLibs.jb.runtime)
 

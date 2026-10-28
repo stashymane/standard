@@ -7,7 +7,7 @@ import dev.stashy.navigation.Navigator
 /**
  * The local [dev.stashy.navigation.Navigator] used within a `NavDisplay`.
  *
- * Provided by `rememberNavigatorSceneDecorator` within the `navigation-ui` module.
+ * Provided by `rememberNavigatorSceneDecorator`.
  */
 public val LocalNavigator: ProvidableCompositionLocal<Navigator> = staticCompositionLocalOf {
     error("No LocalNavigator provided")

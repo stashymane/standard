@@ -45,7 +45,6 @@ include(
     "modules:cron",
     "modules:data",
     "modules:navigation",
-    "modules:navigation-ui",
     "modules:util-time",
     "modules:ui-animation",
     "modules:ui-components",

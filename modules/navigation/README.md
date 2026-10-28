@@ -36,7 +36,7 @@ NavDisplay(
         rememberViewModelStoreNavEntryDecorator(),
     ),
     sceneDecoratorStrategies = listOf(
-        rememberNavigatorSceneDecorator(navigator), // provided within navigation-ui module
+        rememberNavigatorSceneDecorator(navigator),
     ),
     entryProvider = entryProvider {
         entry<Route.Home> { HomeScreen() }

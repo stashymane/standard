@@ -30,7 +30,6 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(projects.modules.navigation)
-            implementation(projects.modules.navigationUi)
             implementation(projects.modules.uiAnimation)
 
             implementation(composeLibs.jb.runtime)

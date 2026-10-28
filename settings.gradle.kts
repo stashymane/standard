@@ -50,6 +50,8 @@ include(
     "modules:ui-components",
     "modules:ui-gradients",
     "modules:ui-responsive",
+    "modules:worker-core",
+    "modules:worker-ktor",
     "samples:navigation-sample",
 )
 

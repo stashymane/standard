@@ -1,0 +1,64 @@
+package dev.stashy.worker.ktor
+
+import dev.stashy.worker.Worker
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationPlugin
+import io.ktor.server.application.ApplicationStarted
+import io.ktor.server.application.ApplicationStopping
+import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.log
+import io.ktor.util.AttributeKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+private val WorkerKey: AttributeKey<Worker> = AttributeKey("Worker")
+
+/**
+ * The worker installed by the [Workers] plugin.
+ */
+public val Application.workers: Worker
+    get() = attributes.getOrNull(WorkerKey)
+        ?: error("The Workers plugin is not installed on this application")
+
+/**
+ * Installs a worker bound to the Ktor application lifecycle.
+ *
+ * ```kotlin
+ * install(Workers) {
+ *     store = InMemoryJobStore(Json)
+ *     handlers {
+ *         handler<EmailJob> { context, job -> send(job) }
+ *     }
+ *     config {
+ *         pollInterval = 10.seconds
+ *     }
+ *     job<EmailJob>("nightly-email", EmailJob(...)) {
+ *         cron("0 0 3 ? * * *")
+ *     }
+ * }
+ * ```
+ */
+public val Workers: ApplicationPlugin<WorkersConfig> =
+    createApplicationPlugin("Workers", ::WorkersConfig) {
+        val config = pluginConfig
+        val worker = config.createWorker()
+        application.attributes.put(WorkerKey, worker)
+
+        application.monitor.subscribe(ApplicationStarted) {
+            application.launch {
+                try {
+                    config.jobs.forEach { it(worker) }
+                    worker.start(application)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    application.log.error("Could not start the worker", error)
+                    throw error
+                }
+            }
+        }
+
+        application.monitor.subscribe(ApplicationStopping) {
+            worker.requestStop()
+        }
+    }

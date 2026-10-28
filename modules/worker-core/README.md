@@ -76,32 +76,7 @@ Database stores must implement these atomicity rules:
 7. `create` and `updateDefinition` receive a typed config with its serializer; the store encodes it
    with its own format. `readConfig` decodes a claimed job's config with the handler's serializer.
 
-Reference schema:
-
-```sql
-CREATE TABLE worker_jobs
-(
-    id               text PRIMARY KEY,
-    handler_id       text        NOT NULL,
-    payload          text        NOT NULL,
-    schedule         text        NOT NULL,
-    enabled          boolean     NOT NULL,
-    status           text        NOT NULL,
-    scheduled_at     timestamptz NOT NULL,
-    next_run_at      timestamptz NOT NULL,
-    attempt          INTEGER     NOT NULL,
-    retry_policy     text        NOT NULL,
-    late_policy      text        NOT NULL,
-    locked_by        text,
-    lock_token       text,
-    lease_expires_at timestamptz,
-    last_started_at  timestamptz,
-    last_finished_at timestamptz,
-    last_error       text
-);
-
-CREATE INDEX worker_jobs_due ON worker_jobs (status, next_run_at, handler_id);
-```
+`worker-exposed` provides an Exposed-based implementation of this contract.
 
 `payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The store encodes
 handler configs with its own `StringFormat`; the definition itself contains no payload. A JSON
@@ -129,30 +104,5 @@ definition looks like:
   }
 }
 ```
-
-Portable claim algorithm:
-
-```sql
-SELECT id
-FROM worker_jobs
-WHERE status = 'PENDING'
-  AND enabled
-  AND handler_id IN (:supportedHandlerIds)
-  AND next_run_at <= :now + :prepareWindow
-ORDER BY next_run_at limit 1;
-
-UPDATE worker_jobs
-SET status           = 'RUNNING',
-    locked_by        = :workerId,
-    lock_token       = :token,
-    attempt          = attempt + 1,
-    lease_expires_at = :now + :lease,
-    last_started_at  = :now
-WHERE id = :id
-  AND status = 'PENDING';
-```
-
-If the update affects zero rows, another worker won the race. Postgres/MySQL stores may instead use
-`SELECT ... FOR UPDATE SKIP LOCKED`, but the conditional update above also works on SQLite.
 
 Completed and failed rows are retained for inspection; pruning them is the store's responsibility.

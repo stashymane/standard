@@ -51,6 +51,7 @@ include(
     "modules:ui-gradients",
     "modules:ui-responsive",
     "modules:worker-core",
+    "modules:worker-exposed",
     "modules:worker-ktor",
     "samples:navigation-sample",
 )

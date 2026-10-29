@@ -1,6 +1,7 @@
 package dev.stashy.worker.schedule
 
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Instant
 
 /**
@@ -32,5 +33,5 @@ private fun Schedule.FixedRate.nextFixedRate(scheduledAt: Instant, finishedAt: I
 
     val intervalNanos = interval.inWholeNanoseconds
     val steps = elapsed.inWholeNanoseconds / intervalNanos + 1
-    return scheduledAt + interval * steps.toDouble()
+    return scheduledAt + (intervalNanos * steps).nanoseconds
 }

@@ -1,6 +1,7 @@
 plugins {
     alias(kotlinLibs.plugins.multiplatform)
     alias(kotlinLibs.plugins.serialization)
+    alias(kotlinLibs.plugins.atomicfu)
 
     id("multiplatform.target.jvm")
 

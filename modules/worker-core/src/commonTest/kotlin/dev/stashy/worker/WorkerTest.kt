@@ -286,6 +286,36 @@ class WorkerTest {
     }
 
     @Test
+    fun `handler errors are retried like exceptions`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobStore(TestJson)
+        var attempts = 0
+        val worker = worker(
+            clock = clock,
+            store = store,
+            retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
+        ) {
+            job<Unit> { _, _ ->
+                attempts++
+                if (attempts == 1) throw AssertionError("boom")
+            }
+        }
+
+        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+        assertEquals(1, attempts)
+        assertEquals(Job.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
+
+        advanceTimeBy(11.seconds)
+        runCurrent()
+        assertEquals(2, attempts)
+        assertEquals(Job.Status.COMPLETED, assertNotNull(store.get(Job.Id("job"))).status)
+
+        worker.stop()
+    }
+
+    @Test
     fun `recurring job schedules its next occurrence`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobStore(TestJson)

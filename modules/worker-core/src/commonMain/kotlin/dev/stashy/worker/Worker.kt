@@ -6,10 +6,10 @@ import dev.stashy.worker.job.JobStore
 import dev.stashy.worker.job.defineJob
 import dev.stashy.worker.schedule.Schedule
 import dev.stashy.worker.schedule.firstOccurrence
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.serializer
-import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
@@ -50,17 +50,14 @@ public class Worker(
     private val executor = JobExecutor(id, store, jobs, config)
     private val inFlight = mutableMapOf<Job.Id, Execution>()
 
-    @Volatile
-    private var runJob: CoroutineJob? = null
+    private val runJob = atomic<CoroutineJob?>(null)
 
     public fun start(scope: CoroutineScope): Unit {
-        check(runJob == null) { "Worker is already started" }
-
         val executionScope = CoroutineScope(
             scope.coroutineContext.minusKey(CoroutineJob) + SupervisorJob() + config.dispatcher,
         )
 
-        runJob = scope.launch(config.dispatcher) {
+        val job = scope.launch(config.dispatcher, start = CoroutineStart.LAZY) {
             try {
                 runLoop(executionScope)
             } finally {
@@ -69,16 +66,21 @@ public class Worker(
                 }
             }
         }
+        if (!runJob.compareAndSet(null, job)) {
+            job.cancel()
+            error("Worker is already started")
+        }
+        job.start()
     }
 
     public fun requestStop(): Unit {
-        runJob?.cancel()
+        runJob.value?.cancel()
     }
 
     public suspend fun stop(): Unit {
-        val job = runJob ?: return
+        val job = runJob.value ?: return
         job.cancelAndJoin()
-        runJob = null
+        runJob.compareAndSet(job, null)
     }
 
     /**
@@ -233,10 +235,11 @@ public class Worker(
             } ?: return
 
             val started = CompletableDeferred<Unit>()
-            val execution = executionScope.launch {
+            val execution = executionScope.launch(start = CoroutineStart.LAZY) {
                 executor.execute(claimed, started)
             }
             inFlight[claimed.job.definition.id] = Execution(claimed, execution, started)
+            execution.start()
         }
     }
 

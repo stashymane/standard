@@ -81,7 +81,7 @@ internal class JobExecutor(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (error: Exception) {
+            } catch (error: Throwable) {
                 handleFailure(claim, error)
             } finally {
                 heartbeat.cancel()

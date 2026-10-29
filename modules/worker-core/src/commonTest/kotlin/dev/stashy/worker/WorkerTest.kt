@@ -346,6 +346,36 @@ class WorkerTest {
     }
 
     @Test
+    fun `recurring job advances to its next occurrence after exhausting attempts`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobStore(TestJson)
+        var runs = 0
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ ->
+                runs++
+                error("boom")
+            }
+        }
+
+        worker.schedule("job", Unit) {
+            every(20.seconds)
+            retry = RetryPolicy(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
+        }
+        worker.start(backgroundScope)
+
+        advanceTimeBy(21.seconds)
+        runCurrent()
+        assertEquals(1, runs)
+
+        val job = assertNotNull(store.get(Job.Id("job")))
+        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(Instant.fromEpochMilliseconds(40_000), job.nextRun)
+        assertEquals("Attempts exhausted: boom", job.lastError)
+
+        worker.stop()
+    }
+
+    @Test
     fun `expired lease is retried after the configured delay`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobStore(TestJson)
@@ -415,6 +445,70 @@ class WorkerTest {
     }
 
     @Test
+    fun `retry that would exceed the late tolerance fails the job instead`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobStore(TestJson)
+        var attempts = 0
+        val worker = worker(
+            clock = clock,
+            store = store,
+            retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+        ) {
+            job<Unit> { _, _ ->
+                attempts++
+                error("boom")
+            }
+        }
+
+        worker.schedule("job", Unit) {
+            once(clock.now())
+            latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
+        }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(1, attempts)
+        val job = assertNotNull(store.get(Job.Id("job")))
+        assertEquals(Job.Status.FAILED, job.status)
+        assertEquals(
+            "Next attempt would start 10s after its scheduled instant: boom",
+            job.lastError,
+        )
+        worker.stop()
+    }
+
+    @Test
+    fun `retry within the late tolerance runs as scheduled`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobStore(TestJson)
+        var attempts = 0
+        val worker = worker(
+            clock = clock,
+            store = store,
+            retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
+        ) {
+            job<Unit> { _, _ ->
+                attempts++
+                if (attempts == 1) error("boom")
+            }
+        }
+
+        worker.schedule("job", Unit) {
+            once(clock.now())
+            latePolicy = LateExecutionPolicy.FailAfter(30.seconds)
+        }
+        worker.start(backgroundScope)
+        runCurrent()
+        assertEquals(1, attempts)
+
+        advanceTimeBy(11.seconds)
+        runCurrent()
+        assertEquals(2, attempts)
+        assertEquals(Job.Status.COMPLETED, assertNotNull(store.get(Job.Id("job"))).status)
+        worker.stop()
+    }
+
+    @Test
     fun `invalid payload fails the job without retrying`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobStore(TestJson)
@@ -464,7 +558,7 @@ class WorkerTest {
 
         val job = assertNotNull(store.get(Job.Id("job")))
         assertEquals(Job.Status.PENDING, job.status)
-        assertNotNull(job.nextRun)
+        assertEquals(clock.now(), job.nextRun)
         worker.stop()
     }
 

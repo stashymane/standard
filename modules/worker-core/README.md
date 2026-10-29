@@ -75,7 +75,8 @@ Both `job` and `prepared` blocks can use `resource` and `defer`:
 
 - `Schedule.Once(at)` runs once at an exact instant. Jobs are claimed and prepared during
   `prepareWindow` and start no earlier than `at`. `LateExecutionPolicy` can fail an occurrence that
-  starts too late (for example after its worker died).
+  starts too late (for example after its worker died); a retry whose instant would exceed the
+  tolerance fails the job instead of being scheduled.
 - `Schedule.FixedRate(interval, startAt)` runs at a fixed cadence and skips missed occurrences.
 - `Schedule.FixedDelay(interval)` waits after each completion.
 - `Schedule.Cron(expression, timeZoneId)` accepts modern seven-field cron expressions through the

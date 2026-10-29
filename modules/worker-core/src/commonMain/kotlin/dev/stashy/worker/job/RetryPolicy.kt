@@ -11,7 +11,9 @@ import kotlin.time.Duration.Companion.seconds
  * Controls retries after a job throws or its lease expires.
  *
  * [maxAttempts] includes the initial execution. A crash consumes an attempt as soon as the job is
- * claimed, so a job that repeatedly kills its worker eventually becomes [Job.Status.FAILED].
+ * claimed, so a one-shot job that repeatedly kills its worker eventually becomes
+ * [Job.Status.FAILED]. A recurring job instead records the error and advances to its next
+ * occurrence, where the attempt count starts over.
  */
 @Serializable
 public data class RetryPolicy(

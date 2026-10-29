@@ -1,15 +1,12 @@
 package dev.stashy.worker
 
 import dev.stashy.worker.job.JobStore
-import dev.stashy.worker.job.LateExecutionPolicy
-import dev.stashy.worker.schedule.Schedule
-import dev.stashy.worker.schedule.nextOccurrence
 import kotlinx.coroutines.*
 import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
- * Executes one claimed job and owns its lease, preparation, retry, and failure transitions.
+ * Executes one claimed job and owns its lease, preparation, and occurrence decision.
  */
 internal class JobExecutor(
     private val workerId: String,
@@ -26,7 +23,8 @@ internal class JobExecutor(
         if (binding == null) {
             val message = "No job registered for '${definition.handlerId}'"
             config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}': $message")
-            finishOccurrence(claim, config.clock.now(), message)
+            val now = config.clock.now()
+            applyDecision(claim, now, OccurrenceDecision.terminal(claim, now, message))
             return
         }
 
@@ -56,33 +54,41 @@ internal class JobExecutor(
                         "Job '${definition.id.value}': $message",
                         invalid,
                     )
-                    finishOccurrence(claim, config.clock.now(), message)
+                    val now = config.clock.now()
+                    applyDecision(claim, now, OccurrenceDecision.terminal(claim, now, message))
                     return@coroutineScope
                 }
                 prepared = execution
 
                 awaitScheduled(claim)
-                if (isTooLate(claim)) return@coroutineScope
+
+                val startedAt = config.clock.now()
+                if (definition.startsTooLate(startedAt, claim.scheduledAt)) {
+                    val message = "Job started ${startedAt - claim.scheduledAt} after its scheduled instant"
+                    config.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': $message")
+                    applyDecision(claim, startedAt, OccurrenceDecision.Fail(message))
+                    return@coroutineScope
+                }
 
                 started.complete(Unit)
                 execution.execute(context)
 
                 val finishedAt = config.clock.now()
-                val nextRunAt = definition.schedule.nextOccurrence(claim.scheduledAt, finishedAt)
-                val updated = attemptStore("Could not complete job '${definition.id.value}'") {
-                    store.complete(claim, finishedAt, nextRunAt)
-                } ?: false
-
-                if (!updated) {
-                    config.logger.log(
-                        WorkerLogger.Level.WARN,
-                        "Lost the lease for job '${definition.id.value}' before completion",
-                    )
-                }
+                applyDecision(claim, finishedAt, OccurrenceDecision.success(claim, finishedAt))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
-                handleFailure(claim, error)
+                val now = config.clock.now()
+                val message = error.message ?: error::class.simpleName ?: "Unknown handler failure"
+                config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}' failed", error)
+                val decision = OccurrenceDecision.failure(claim, now, message)
+                val applied = applyDecision(claim, now, decision)
+                if (applied && decision is OccurrenceDecision.Retry) {
+                    config.logger.log(
+                        WorkerLogger.Level.WARN,
+                        "Job '${definition.id.value}' will retry at ${decision.retryAt}",
+                    )
+                }
             } finally {
                 heartbeat.cancel()
                 prepared?.let { dispose(claim, it) }
@@ -97,38 +103,50 @@ internal class JobExecutor(
         val now = config.clock.now()
         val definition = claim.job.definition
         val message = "Lease expired after ${claim.attempt} attempt(s)"
-
-        if (claim.attempt >= definition.retry.maxAttempts) {
-            config.logger.log(
-                WorkerLogger.Level.WARN,
-                "Job '${definition.id.value}' exhausted its attempts ($message)"
-            )
-            finishOccurrence(claim, now, message)
-            return
+        val decision = OccurrenceDecision.failure(claim, now, message)
+        if (decision !is OccurrenceDecision.Retry) {
+            config.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': ${decision.error}")
         }
-
-        val retryAt = now + definition.retry.delayFor(claim.attempt)
-        val updated = attemptStore("Could not reschedule expired job '${definition.id.value}'") {
-            store.reschedule(claim, now, retryAt, message)
-        } ?: false
-
-        if (updated) {
+        val applied = applyDecision(claim, now, decision)
+        if (applied && decision is OccurrenceDecision.Retry) {
             config.logger.log(
                 WorkerLogger.Level.WARN,
-                "Job '${definition.id.value}' will retry at $retryAt ($message)"
+                "Job '${definition.id.value}' will retry at ${decision.retryAt} ($message)",
             )
         }
     }
 
     /**
-     * Releases a claimed job during worker shutdown.
+     * Releases a claimed job during worker shutdown, making it runnable again immediately.
      */
     suspend fun release(claim: JobStore.Claimed, reason: String): Unit {
         val now = config.clock.now()
-        val retryAt = now + claim.job.definition.retry.delayFor(claim.attempt)
-        attemptStore("Could not release job '${claim.job.definition.id.value}'") {
-            store.reschedule(claim, now, retryAt, reason)
+        applyDecision(claim, now, OccurrenceDecision.Retry(now, reason))
+    }
+
+    private suspend fun applyDecision(claim: JobStore.Claimed, now: Instant, decision: OccurrenceDecision): Boolean {
+        val id = claim.job.definition.id.value
+        val applied = when (decision) {
+            is OccurrenceDecision.Complete -> attemptStore("Could not complete job '$id'") {
+                store.complete(claim, now, decision.nextRunAt, decision.error)
+            }
+
+            is OccurrenceDecision.Retry -> attemptStore("Could not reschedule job '$id'") {
+                store.reschedule(claim, now, decision.retryAt, decision.error)
+            }
+
+            is OccurrenceDecision.Fail -> attemptStore("Could not fail job '$id'") {
+                store.fail(claim, now, decision.error)
+            }
+        } ?: false
+
+        if (!applied) {
+            config.logger.log(
+                WorkerLogger.Level.WARN,
+                "Lost the lease for job '$id' before its decision could be stored",
+            )
         }
+        return applied
     }
 
     private suspend fun dispose(claim: JobStore.Claimed, prepared: Handler.Prepared) {
@@ -152,66 +170,6 @@ internal class JobExecutor(
             )
         }
         caller.ensureActive()
-    }
-
-    private suspend fun handleFailure(claim: JobStore.Claimed, error: Throwable): Unit {
-        val now = config.clock.now()
-        val definition = claim.job.definition
-        val message = error.message ?: error::class.simpleName ?: "Unknown handler failure"
-        config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}' failed", error)
-
-        if (claim.attempt >= definition.retry.maxAttempts) {
-            finishOccurrence(claim, now, "Attempts exhausted: $message")
-            return
-        }
-
-        val retryAt = now + definition.retry.delayFor(claim.attempt)
-        val updated = attemptStore("Could not schedule retry for job '${definition.id.value}'") {
-            store.reschedule(claim, now, retryAt, message)
-        } ?: false
-
-        if (updated) {
-            config.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}' will retry at $retryAt")
-        }
-    }
-
-    /**
-     * Ends an occurrence: one-shot jobs fail, while recurring jobs advance to their next occurrence.
-     */
-    private suspend fun finishOccurrence(claim: JobStore.Claimed, now: Instant, error: String) {
-        val definition = claim.job.definition
-        val next = definition.schedule.nextOccurrence(claim.scheduledAt, now)
-        val updated = attemptStore("Could not finish job '${definition.id.value}'") {
-            if (next == null) {
-                store.fail(claim, now, error)
-            } else {
-                store.complete(claim, now, next, error)
-            }
-        } ?: false
-
-        if (!updated) {
-            config.logger.log(
-                WorkerLogger.Level.WARN,
-                "Lost the lease for job '${definition.id.value}' while finishing it",
-            )
-        }
-    }
-
-    private suspend fun isTooLate(claim: JobStore.Claimed): Boolean {
-        val definition = claim.job.definition
-        if (definition.schedule !is Schedule.Once) return false
-
-        val policy = definition.latePolicy as? LateExecutionPolicy.FailAfter ?: return false
-        val lateness = config.clock.now() - claim.scheduledAt
-        return when {
-            lateness <= policy.tolerance -> false
-            else -> {
-                val message = "Job started $lateness after its scheduled instant"
-                config.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': $message")
-                finishOccurrence(claim, config.clock.now(), message)
-                true
-            }
-        }
     }
 
     private suspend fun awaitScheduled(claim: JobStore.Claimed): Unit {

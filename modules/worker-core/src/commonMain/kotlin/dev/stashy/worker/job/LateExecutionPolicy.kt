@@ -7,6 +7,8 @@ import kotlin.time.Duration
 
 /**
  * Decides what to do when an exact-instant ([Schedule.Once]) job starts later than scheduled.
+ * With [FailAfter], a retry whose instant would exceed the tolerance fails the job instead of
+ * being scheduled.
  */
 @Serializable
 public sealed interface LateExecutionPolicy {

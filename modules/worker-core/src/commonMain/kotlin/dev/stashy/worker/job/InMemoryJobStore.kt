@@ -24,7 +24,16 @@ public class InMemoryJobStore(
 
     override suspend fun get(id: Job.Id): Job? = mutex.withLock { jobs[id]?.job }
 
-    override suspend fun list(): List<Job> = mutex.withLock { jobs.values.map { it.job } }
+    override suspend fun list(filter: JobStore.Filter): List<Job> = mutex.withLock {
+        jobs.values
+            .asSequence()
+            .map { it.job }
+            .filter { job -> filter.statuses == null || job.status in filter.statuses }
+            .filter { job -> filter.handlerId == null || job.definition.handlerId == filter.handlerId }
+            .sortedBy { it.definition.id.value }
+            .take(filter.limit)
+            .toList()
+    }
 
     override suspend fun <C : Any> create(
         definition: Job.Definition,
@@ -92,33 +101,35 @@ public class InMemoryJobStore(
         jobs.remove(id) != null
     }
 
-    override suspend fun claim(request: JobStore.ClaimRequest): JobStore.Claimed? = mutex.withLock {
+    override suspend fun claim(request: JobStore.ClaimRequest, limit: Int): List<JobStore.Claimed> = mutex.withLock {
+        require(limit >= 1) { "limit must be at least 1" }
         val horizon = request.now + request.prepareWindow
-        val entry = jobs.values
-            .asSequence()
+        val runnable = jobs.values
             .filter { it.job.isRunnableAt(horizon, request.supportedHandlerIds) }
-            .minByOrNull { it.job.nextRun!! }
-            ?: return@withLock null
+            .sortedBy { it.job.nextRun!! }
+            .take(limit)
 
-        val candidate = entry.job
-        val attempt = candidate.attempt + 1
-        val claimed = candidate.copy(
-            status = Job.Status.RUNNING,
-            attempt = attempt,
-            lock = Job.Lock(
-                token = Uuid.random().toString(),
-                lockedBy = request.workerId,
-                expiresAt = request.now + request.lease,
-            ),
-            lastStartedAt = request.now,
-        )
-        jobs[candidate.definition.id] = entry.copy(job = claimed)
-        JobStore.Claimed(
-            job = claimed,
-            attempt = attempt,
-            scheduledAt = candidate.scheduledAt ?: candidate.nextRun ?: request.now,
-            recovered = false,
-        )
+        runnable.map { entry ->
+            val candidate = entry.job
+            val attempt = candidate.attempt + 1
+            val claimed = candidate.copy(
+                status = Job.Status.RUNNING,
+                attempt = attempt,
+                lock = Job.Lock(
+                    token = Uuid.random().toString(),
+                    lockedBy = request.workerId,
+                    expiresAt = request.now + request.lease,
+                ),
+                lastStartedAt = request.now,
+            )
+            jobs[candidate.definition.id] = entry.copy(job = claimed)
+            JobStore.Claimed(
+                job = claimed,
+                attempt = attempt,
+                scheduledAt = candidate.scheduledAt ?: candidate.nextRun ?: request.now,
+                recovered = false,
+            )
+        }
     }
 
     override suspend fun renew(claim: JobStore.Claimed, now: Instant, lease: Duration): Boolean = mutex.withLock {

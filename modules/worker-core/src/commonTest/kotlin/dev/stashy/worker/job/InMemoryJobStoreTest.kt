@@ -75,6 +75,43 @@ class InMemoryJobStoreTest {
     }
 
     @Test
+    fun `claim takes the earliest due jobs up to the limit`() = runTest {
+        val store = InMemoryJobStore(TestJson)
+        listOf("a", "b", "c").forEach {
+            store.create(definition(it), Unit, serializer(), now)
+        }
+
+        val claims = store.claim(request(now, lease = 1.minutes), limit = 2)
+
+        assertEquals(listOf("a", "b"), claims.map { it.job.definition.id.value })
+        assertTrue(claims.all { it.job.status == Job.Status.RUNNING })
+        assertEquals(Job.Status.PENDING, store.get(Job.Id("c"))?.status)
+    }
+
+    @Test
+    fun `list filters by status and handler and applies the limit`() = runTest {
+        val store = InMemoryJobStore(TestJson)
+        store.create(definition("one"), Unit, serializer(), now)
+        store.create(definition("two"), Unit, serializer(), now)
+        store.create(definition("other").copy(handlerId = "other"), Unit, serializer(), now)
+        store.claim(request(now, lease = 1.minutes))
+
+        assertEquals(
+            listOf("one", "other", "two"),
+            store.list().map { it.definition.id.value },
+        )
+        assertEquals(
+            listOf("one"),
+            store.list(JobStore.Filter(statuses = setOf(Job.Status.RUNNING))).map { it.definition.id.value },
+        )
+        assertEquals(
+            listOf("other"),
+            store.list(JobStore.Filter(handlerId = "other")).map { it.definition.id.value },
+        )
+        assertEquals(2, store.list(JobStore.Filter(limit = 2)).size)
+    }
+
+    @Test
     fun `state changes require the owning token`() = runTest {
         val store = InMemoryJobStore(TestJson)
         val definition = definition("token")

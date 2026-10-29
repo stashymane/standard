@@ -74,6 +74,58 @@ class ExposedJobStoreTest {
     }
 
     @Test
+    fun `claim takes the earliest due jobs up to the limit`() = runTest {
+        h2Store().use { fixture ->
+            val first = definition("first")
+            val second = definition("second", schedule = Schedule.Once(now + 1.seconds))
+            val later = definition("later", schedule = Schedule.Once(now + 30.seconds))
+            assertTrue(fixture.store.create(later, Unit, serializer(), now + 30.seconds))
+            assertTrue(fixture.store.create(first, Unit, serializer(), now))
+            assertTrue(fixture.store.create(second, Unit, serializer(), now + 1.seconds))
+
+            val claims = fixture.store.claim(request(now), limit = 2)
+
+            assertEquals(listOf("first", "second"), claims.map { it.job.definition.id.value })
+            assertTrue(claims.all { it.job.status == Job.Status.RUNNING && it.attempt == 1 })
+            assertEquals(Job.Status.PENDING, fixture.store.get(later.id)?.status)
+        }
+    }
+
+    @Test
+    fun `list filters by status and handler and applies the limit`() = runTest {
+        h2Store().use { fixture ->
+            assertTrue(fixture.store.create(definition("one"), Unit, serializer(), now))
+            assertTrue(
+                fixture.store.create(
+                    definition("two", schedule = Schedule.Once(now + 1.seconds)),
+                    Unit, serializer(), now + 1.seconds,
+                ),
+            )
+            assertTrue(
+                fixture.store.create(
+                    definition("other", handlerId = "other", schedule = Schedule.Once(now + 2.seconds)),
+                    Unit, serializer(), now + 2.seconds,
+                ),
+            )
+            assertNotNull(fixture.store.claim(request(now)))
+
+            assertEquals(
+                listOf("one", "other", "two"),
+                fixture.store.list().map { it.definition.id.value },
+            )
+            assertEquals(
+                listOf("one"),
+                fixture.store.list(JobStore.Filter(statuses = setOf(Job.Status.RUNNING))).map { it.definition.id.value },
+            )
+            assertEquals(
+                listOf("other"),
+                fixture.store.list(JobStore.Filter(handlerId = "other")).map { it.definition.id.value },
+            )
+            assertEquals(2, fixture.store.list(JobStore.Filter(limit = 2)).size)
+        }
+    }
+
+    @Test
     fun `only one concurrent claim succeeds`() = runTest {
         h2Store().use { fixture ->
             val definition = definition("concurrent")

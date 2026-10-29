@@ -216,29 +216,33 @@ public class Worker(
         val handlerIds = jobs.ids()
         if (handlerIds.isEmpty()) return
 
-        while (inFlight.size < config.maxConcurrentJobs) {
-            val claimed = try {
-                store.claim(
-                    JobStore.ClaimRequest(
-                        now = config.clock.now(),
-                        supportedHandlerIds = handlerIds,
-                        prepareWindow = config.prepareWindow,
-                        lease = config.leaseDuration,
-                        workerId = id,
-                    ),
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                config.logger.log(WorkerLogger.Level.ERROR, "Could not claim worker jobs", error)
-                return
-            } ?: return
+        val available = config.maxConcurrentJobs - inFlight.size
+        if (available <= 0) return
 
+        val claimed = try {
+            store.claim(
+                JobStore.ClaimRequest(
+                    now = config.clock.now(),
+                    supportedHandlerIds = handlerIds,
+                    prepareWindow = config.prepareWindow,
+                    lease = config.leaseDuration,
+                    workerId = id,
+                ),
+                limit = available,
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            config.logger.log(WorkerLogger.Level.ERROR, "Could not claim worker jobs", error)
+            return
+        }
+
+        for (claim in claimed) {
             val started = CompletableDeferred<Unit>()
             val execution = executionScope.launch(start = CoroutineStart.LAZY) {
-                executor.execute(claimed, started)
+                executor.execute(claim, started)
             }
-            inFlight[claimed.job.definition.id] = Execution(claimed, execution, started)
+            inFlight[claim.job.definition.id] = Execution(claim, execution, started)
             execution.start()
         }
     }

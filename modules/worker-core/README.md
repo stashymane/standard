@@ -102,11 +102,11 @@ the job complete, so handlers must be idempotent. Use `Handler.Context.runKey` f
 
 Database stores must implement these atomicity rules:
 
-1. `claim` selects one enabled `PENDING` job with a supported `handler_id` and
-   `next_run_at <= now + prepareWindow`.
-2. It atomically updates that row to `RUNNING`, assigns a fresh lock (`lock_token`, `locked_by`,
-   `lease_expires_at`), and increments `attempt`.
-3. If the conditional update affects no rows, return `null` and try another candidate.
+1. `claim` selects up to `limit` enabled `PENDING` jobs with a supported `handler_id` and
+   `next_run_at <= now + prepareWindow`, earliest due first.
+2. It atomically updates each of those rows to `RUNNING`, assigns a fresh lock (`lock_token`,
+   `locked_by`, `lease_expires_at`), and increments `attempt`.
+3. A row whose conditional update affects no rows was claimed by another worker; skip it.
 4. `renew`, `complete`, `reschedule` and `fail` must only update a row while its `lock_token` still
    matches.
 5. `expired` returns rows with `status = RUNNING` and `lease_expires_at <= now`. The worker

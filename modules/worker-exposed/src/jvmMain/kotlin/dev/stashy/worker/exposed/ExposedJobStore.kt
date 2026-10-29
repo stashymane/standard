@@ -39,8 +39,23 @@ public class ExposedJobStore(
             ?.toJob(format)
     }
 
-    override suspend fun list(): List<Job> = transaction {
-        WorkerJobsTable.selectAll().map { it.toJob(format) }
+    override suspend fun list(filter: JobStore.Filter): List<Job> = transaction {
+        val statuses = filter.statuses
+        val handlerId = filter.handlerId
+        WorkerJobsTable.selectAll()
+            .where {
+                var condition: Op<Boolean> = Op.TRUE
+                if (statuses != null) {
+                    condition = condition and (WorkerJobsTable.status inList statuses.map { it.name })
+                }
+                if (handlerId != null) {
+                    condition = condition and (WorkerJobsTable.handlerId eq handlerId)
+                }
+                condition
+            }
+            .orderBy(WorkerJobsTable.id to SortOrder.ASC)
+            .limit(filter.limit)
+            .map { it.toJob(format) }
     }
 
     override suspend fun <C : Any> create(
@@ -116,56 +131,43 @@ public class ExposedJobStore(
         } > 0
     }
 
-    override suspend fun claim(request: JobStore.ClaimRequest): JobStore.Claimed? = transaction {
+    override suspend fun claim(request: JobStore.ClaimRequest, limit: Int): List<JobStore.Claimed> = transaction {
+        require(limit >= 1) { "limit must be at least 1" }
         val horizon = request.now + request.prepareWindow
-        val attempted = mutableSetOf<String>()
+        val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
+            .where {
+                (WorkerJobsTable.status eq Job.Status.PENDING.name) and
+                        (WorkerJobsTable.enabled eq true) and
+                        (WorkerJobsTable.handlerId inList request.supportedHandlerIds) and
+                        (WorkerJobsTable.nextRunAt lessEq horizon)
+            }
+            .orderBy(WorkerJobsTable.nextRunAt to SortOrder.ASC)
+            .limit(limit)
+            .map { it[WorkerJobsTable.id] }
 
-        while (true) {
-            val candidate = WorkerJobsTable.selectAll()
-                .where {
-                    val due = (WorkerJobsTable.status eq Job.Status.PENDING.name) and
-                            (WorkerJobsTable.enabled eq true) and
-                            (WorkerJobsTable.handlerId inList request.supportedHandlerIds) and
-                            (WorkerJobsTable.nextRunAt lessEq horizon)
-                    if (attempted.isEmpty()) {
-                        due
-                    } else {
-                        due and (WorkerJobsTable.id notInList attempted)
-                    }
-                }
-                .orderBy(WorkerJobsTable.nextRunAt to SortOrder.ASC)
-                .limit(1)
-                .firstOrNull()
-                ?.toJob(format)
-                ?: return@transaction null
-
-            attempted += candidate.definition.id.value
-            if (attempted.size > MAX_CLAIM_ATTEMPTS) return@transaction null
+        candidateIds.mapNotNull { id ->
             val token = Uuid.random().toString()
             val leaseUntil = request.now + request.lease
             val updated = WorkerJobsTable.update({
-                (WorkerJobsTable.id eq candidate.definition.id.value) and
-                        (WorkerJobsTable.status eq Job.Status.PENDING.name)
+                (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq Job.Status.PENDING.name)
             }) {
                 it.setClaim(request.workerId, token, leaseUntil, request.now)
             }
+            if (updated != 1) return@mapNotNull null
 
-            if (updated == 1) {
-                val claimed = candidate.copy(
-                    status = Job.Status.RUNNING,
-                    attempt = candidate.attempt + 1,
-                    lock = Job.Lock(token, request.workerId, leaseUntil),
-                    lastStartedAt = request.now,
-                )
-                return@transaction JobStore.Claimed(
-                    job = claimed,
-                    attempt = claimed.attempt,
-                    scheduledAt = candidate.scheduledAt ?: candidate.nextRun ?: request.now,
-                    recovered = false,
-                )
-            }
+            // Re-read the row the guarded update won: the attempt counter and scheduled instant
+            // are exactly what was committed.
+            val job = WorkerJobsTable.selectAll()
+                .where { WorkerJobsTable.id eq id }
+                .single()
+                .toJob(format)
+            JobStore.Claimed(
+                job = job,
+                attempt = job.attempt,
+                scheduledAt = job.scheduledAt ?: job.nextRun ?: request.now,
+                recovered = false,
+            )
         }
-        null
     }
 
     override suspend fun renew(claim: JobStore.Claimed, now: Instant, lease: Duration): Boolean = transaction {
@@ -246,8 +248,4 @@ public class ExposedJobStore(
         WorkerJobsTable.select(WorkerJobsTable.id)
             .where { WorkerJobsTable.id eq id.value }
             .any()
-
-    private companion object {
-        const val MAX_CLAIM_ATTEMPTS: Int = 16
-    }
 }

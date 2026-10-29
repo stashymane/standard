@@ -9,10 +9,11 @@ import kotlin.time.Instant
  *
  * Implementations used by more than one worker must make [claim] atomic. The contract is:
  *
- * - [claim] selects only [Job.Status.PENDING] definitions whose handler id is in
- *   [ClaimRequest.supportedHandlerIds] and whose next run is within the prepare window.
- * - It atomically marks the job [Job.Status.RUNNING] with a fresh [Job.Lock], increments the
- *   attempt counter, and sets the lease expiry.
+ * - [claim] selects up to `limit` [Job.Status.PENDING] jobs whose handler id is in
+ *   [ClaimRequest.supportedHandlerIds] and whose next run is within the prepare window, earliest
+ *   due first.
+ * - It atomically marks each job [Job.Status.RUNNING] with a fresh [Job.Lock], increments the
+ *   attempt counter, and sets the lease expiry, skipping jobs claimed concurrently by others.
  * - [renew], [complete], [reschedule], and [fail] must only modify a job while the supplied token
  *   still owns the lease, and return false otherwise.
  * - [expired] returns recently expired leases without claiming them. Callers transition those jobs
@@ -56,9 +57,27 @@ public interface JobStore {
             get() = checkNotNull(job.lock) { "A claimed job must be locked" }.token
     }
 
+    /**
+     * Criteria for listing jobs. Null fields match everything.
+     */
+    public data class Filter(
+        public val statuses: Set<Job.Status>? = null,
+        public val handlerId: String? = null,
+        public val limit: Int = Int.MAX_VALUE,
+    ) {
+        init {
+            require(statuses == null || statuses.isNotEmpty()) { "statuses must be null or non-empty" }
+            require(handlerId == null || handlerId.isNotBlank()) { "handlerId must be null or non-blank" }
+            require(limit >= 1) { "limit must be at least 1" }
+        }
+    }
+
     public suspend fun get(id: Job.Id): Job?
 
-    public suspend fun list(): List<Job>
+    /**
+     * Lists jobs matching [filter], ordered by job id, at most [Filter.limit] entries.
+     */
+    public suspend fun list(filter: Filter = Filter()): List<Job>
 
     /**
      * Creates a pending job at [scheduledAt]. Returns false when the id already exists.
@@ -100,9 +119,15 @@ public interface JobStore {
     public suspend fun delete(id: Job.Id): Boolean
 
     /**
-     * Atomically claims one runnable job.
+     * Atomically claims the next runnable job.
      */
-    public suspend fun claim(request: ClaimRequest): Claimed?
+    public suspend fun claim(request: ClaimRequest): Claimed? = claim(request, limit = 1).firstOrNull()
+
+    /**
+     * Atomically claims up to [limit] runnable jobs, earliest due first. Jobs claimed concurrently
+     * by another worker are skipped.
+     */
+    public suspend fun claim(request: ClaimRequest, limit: Int): List<Claimed>
 
     /**
      * Extends the lease. Returns false if the caller no longer owns it.

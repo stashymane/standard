@@ -14,27 +14,29 @@ import kotlin.time.Instant
 internal class JobExecutor(
     private val workerId: String,
     private val store: JobStore,
-    private val handlers: HandlerRegistry,
+    private val handlers: JobsRegistry,
     private val config: WorkerConfig,
 ) {
-    suspend fun execute(claim: JobStore.Claimed): Unit {
+    suspend fun execute(
+        claim: JobStore.Claimed,
+        started: CompletableDeferred<Unit>,
+    ): Unit {
         val definition = claim.job.definition
         val binding = handlers.find(definition.handlerId)
         if (binding == null) {
-            val message = "No handler registered for '${definition.handlerId}'"
+            val message = "No job registered for '${definition.handlerId}'"
             config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}': $message")
             finishOccurrence(claim, config.clock.now(), message)
             return
         }
 
-        val prepared = try {
-            binding.prepare(store, claim)
-        } catch (invalid: InvalidHandlerPayloadException) {
-            val message = "Could not decode job config: ${invalid.message ?: "invalid config"}"
-            config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}': $message", invalid)
-            finishOccurrence(claim, config.clock.now(), message)
-            return
-        }
+        val context = Handler.Context(
+            jobId = definition.id,
+            workerId = workerId,
+            attempt = claim.attempt,
+            scheduledAt = claim.scheduledAt,
+            clock = config.clock,
+        )
 
         coroutineScope {
             val executionScope = this
@@ -43,19 +45,27 @@ internal class JobExecutor(
                     executionScope.cancel(CancellationException("Lease lost for job '${definition.id.value}'"))
                 }
             }
+            var prepared: Handler.Prepared? = null
             try {
+                val execution = try {
+                    binding.prepare(store, claim, context)
+                } catch (invalid: InvalidHandlerPayloadException) {
+                    val message = "Could not decode job config: ${invalid.message ?: "invalid config"}"
+                    config.logger.log(
+                        WorkerLogger.Level.ERROR,
+                        "Job '${definition.id.value}': $message",
+                        invalid,
+                    )
+                    finishOccurrence(claim, config.clock.now(), message)
+                    return@coroutineScope
+                }
+                prepared = execution
+
                 awaitScheduled(claim)
                 if (isTooLate(claim)) return@coroutineScope
 
-                val context = Handler.Context(
-                    jobId = definition.id,
-                    workerId = workerId,
-                    attempt = claim.attempt,
-                    scheduledAt = claim.scheduledAt,
-                    startedAt = config.clock.now(),
-                    clock = config.clock,
-                )
-                prepared(context)
+                started.complete(Unit)
+                execution.execute(context)
 
                 val finishedAt = config.clock.now()
                 val nextRunAt = definition.schedule.nextOccurrence(claim.scheduledAt, finishedAt)
@@ -75,6 +85,7 @@ internal class JobExecutor(
                 handleFailure(claim, error)
             } finally {
                 heartbeat.cancel()
+                prepared?.let { dispose(claim, it) }
             }
         }
     }
@@ -118,6 +129,29 @@ internal class JobExecutor(
         attemptStore("Could not release job '${claim.job.definition.id.value}'") {
             store.reschedule(claim, now, retryAt, reason)
         }
+    }
+
+    private suspend fun dispose(claim: JobStore.Claimed, prepared: Handler.Prepared) {
+        val caller = currentCoroutineContext()
+        try {
+            withContext(NonCancellable) {
+                prepared.dispose()
+            }
+        } catch (cancelled: CancellationException) {
+            caller.ensureActive()
+            config.logger.log(
+                WorkerLogger.Level.WARN,
+                "Cleanup was cancelled for prepared job '${claim.job.definition.id.value}'",
+                cancelled,
+            )
+        } catch (error: Exception) {
+            config.logger.log(
+                WorkerLogger.Level.ERROR,
+                "Could not dispose prepared job '${claim.job.definition.id.value}'",
+                error,
+            )
+        }
+        caller.ensureActive()
     }
 
     private suspend fun handleFailure(claim: JobStore.Claimed, error: Throwable): Unit {
@@ -181,8 +215,9 @@ internal class JobExecutor(
     }
 
     private suspend fun awaitScheduled(claim: JobStore.Claimed): Unit {
+        val executeAt = maxOf(claim.scheduledAt, claim.job.nextRun ?: claim.scheduledAt)
         while (true) {
-            val remaining = claim.scheduledAt - config.clock.now()
+            val remaining = executeAt - config.clock.now()
             if (remaining <= Duration.ZERO) return
             delay(remaining)
         }

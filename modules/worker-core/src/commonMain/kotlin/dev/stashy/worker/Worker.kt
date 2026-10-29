@@ -18,9 +18,9 @@ import kotlinx.coroutines.Job as CoroutineJob
 /**
  * Polls a [JobStore], claims due jobs, and delegates execution to [JobExecutor].
  *
- * Handlers are selected by the serial name of their config type. [start] may be used by any
- * coroutine host; the Ktor integration uses the application scope so that shutdown cancels the
- * worker and its graceful cleanup is awaited.
+ * Jobs are selected by the serial name of their config type. [start] may be used by any coroutine
+ * host; the Ktor integration uses the application scope so that shutdown cancels the worker and
+ * its graceful cleanup is awaited.
  */
 public class Worker(
     public val id: String = Uuid.generateV7().toString(),
@@ -28,11 +28,11 @@ public class Worker(
     configure: Builder.() -> Unit = {},
 ) {
     public class Builder internal constructor() {
-        internal val handlers = HandlerRegistry()
+        internal val jobs = JobsRegistry()
         internal val config = WorkerConfig()
 
-        public fun handlers(configure: HandlerRegistry.() -> Unit): Unit {
-            handlers.configure()
+        public fun jobs(configure: JobsRegistry.() -> Unit): Unit {
+            jobs.configure()
         }
 
         public fun config(configure: WorkerConfig.() -> Unit): Unit {
@@ -45,9 +45,9 @@ public class Worker(
     }
 
     private val builder = Builder().apply(configure)
-    private val handlers: HandlerRegistry = builder.handlers
+    private val jobs: JobsRegistry = builder.jobs
     private val config: WorkerConfig = builder.config.also { it.validate() }
-    private val executor = JobExecutor(id, store, handlers, config)
+    private val executor = JobExecutor(id, store, jobs, config)
     private val inFlight = mutableMapOf<Job.Id, Execution>()
 
     @Volatile
@@ -116,7 +116,7 @@ public class Worker(
         at: Instant?,
     ): Job.Id {
         val handlerId = serializer.descriptor.serialName
-        handlers.require(handlerId)
+        jobs.require(handlerId)
         val startAt = at ?: config.clock.now()
         val definition = Job.Definition(
             id = Job.Id.random(),
@@ -140,7 +140,7 @@ public class Worker(
             "Job '${definition.id.value}' targets handler '${definition.handlerId}' " +
                     "but its config serializer is '${serializer.descriptor.serialName}'"
         }
-        handlers.require(definition.handlerId)
+        jobs.require(definition.handlerId)
 
         val now = config.clock.now()
         val existing = store.get(definition.id)
@@ -170,7 +170,7 @@ public class Worker(
         configure: JobBuilder.() -> Unit,
     ): Job.Id {
         val handlerId = serializer.descriptor.serialName
-        handlers.require(handlerId)
+        jobs.require(handlerId)
         val definition = defineJob(handlerId, id, config.retry, configure)
         return sync(definition, jobConfig, serializer)
     }
@@ -211,7 +211,7 @@ public class Worker(
     }
 
     private suspend fun claimRunnable(executionScope: CoroutineScope): Unit {
-        val handlerIds = handlers.ids()
+        val handlerIds = jobs.ids()
         if (handlerIds.isEmpty()) return
 
         while (inFlight.size < config.maxConcurrentJobs) {
@@ -232,29 +232,46 @@ public class Worker(
                 return
             } ?: return
 
-            val execution = executionScope.launch { executor.execute(claimed) }
-            inFlight[claimed.job.definition.id] = Execution(claimed, execution)
+            val started = CompletableDeferred<Unit>()
+            val execution = executionScope.launch {
+                executor.execute(claimed, started)
+            }
+            inFlight[claimed.job.definition.id] = Execution(claimed, execution, started)
         }
     }
 
     private suspend fun shutdown(executionScope: CoroutineScope) {
         val running = inFlight.values.toList()
         if (running.isNotEmpty()) {
-            config.logger.log(
-                WorkerLogger.Level.INFO,
-                "Waiting up to ${config.shutdownGracePeriod} for ${running.size} worker job(s)",
-            )
-            withTimeoutOrNull(config.shutdownGracePeriod) {
-                running.map { it.coroutine }.joinAll()
+            val toRelease = linkedSetOf<Execution>()
+
+            val notStarted = running.filterNot { it.started.isCompleted }
+            notStarted.forEach {
+                it.coroutine.cancel()
+                toRelease += it
+            }
+
+            val executing = running.filter { it.started.isCompleted }
+            if (executing.isNotEmpty()) {
+                config.logger.log(
+                    WorkerLogger.Level.INFO,
+                    "Waiting up to ${config.shutdownGracePeriod} for ${executing.size} executing worker job(s)",
+                )
+                withTimeoutOrNull(config.shutdownGracePeriod) {
+                    executing.map { it.coroutine }.joinAll()
+                }
             }
 
             val remaining = inFlight.values.filterNot { it.coroutine.isCompleted }
-            remaining.forEach { it.coroutine.cancel() }
+            remaining.forEach {
+                it.coroutine.cancel()
+                toRelease += it
+            }
             withTimeoutOrNull(1.seconds) {
-                remaining.map { it.coroutine }.joinAll()
+                toRelease.map { it.coroutine }.joinAll()
             }
 
-            for (execution in remaining) {
+            for (execution in toRelease) {
                 executor.release(execution.claim, "Worker stopped")
             }
         }
@@ -268,5 +285,6 @@ public class Worker(
     private class Execution(
         val claim: JobStore.Claimed,
         val coroutine: CoroutineJob,
+        val started: CompletableDeferred<Unit>,
     )
 }

@@ -26,13 +26,20 @@ public val Application.workers: Worker
  * ```kotlin
  * install(Workers) {
  *     store = InMemoryJobStore(Json)
- *     handlers {
- *         handler<EmailJob> { context, job -> send(job) }
+ *     jobs {
+ *         job<EmailJob> { context, job -> send(job) }
+ *         prepared<ReportJob> { context, job ->
+ *             val report by resource { buildReport(job) }.onDispose { it.close() }
+ *             handler { publish(report) }
+ *         }
  *     }
  *     config {
  *         pollInterval = 10.seconds
  *     }
- *     job<EmailJob>("nightly-email", EmailJob(...)) {
+ * }
+ *
+ * application.launch {
+ *     application.workers.schedule("nightly-email", EmailJob(...)) {
  *         cron("0 0 3 ? * * *")
  *     }
  * }
@@ -47,7 +54,6 @@ public val Workers: ApplicationPlugin<WorkersConfig> =
         application.monitor.subscribe(ApplicationStarted) {
             application.launch {
                 try {
-                    config.jobs.forEach { it(worker) }
                     worker.start(application)
                 } catch (cancelled: CancellationException) {
                     throw cancelled

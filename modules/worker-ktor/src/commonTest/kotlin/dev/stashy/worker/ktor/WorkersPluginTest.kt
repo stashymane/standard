@@ -1,10 +1,10 @@
 package dev.stashy.worker.ktor
 
-import dev.stashy.worker.handler
 import dev.stashy.worker.job.InMemoryJobStore
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -28,8 +28,8 @@ class WorkersPluginTest {
             install(Workers) {
                 this.store = store
                 id = "test-worker"
-                handlers {
-                    handler<Unit> { _, _ -> executed.complete(Unit) }
+                jobs {
+                    job<Unit> { _, _ -> executed.complete(Unit) }
                 }
                 config {
                     pollInterval = 10.milliseconds
@@ -38,7 +38,10 @@ class WorkersPluginTest {
                     heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
                 }
-                job<Unit>("test-job", Unit) {
+            }
+
+            launch {
+                workers.schedule("test-job", Unit) {
                     once(Clock.System.now())
                 }
             }

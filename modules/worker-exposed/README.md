@@ -14,8 +14,8 @@ transaction(database) {
 }
 
 val worker = Worker(id = "api-1", store = store) {
-    handlers {
-        handler<EmailConfig> { context, config -> send(config) }
+    jobs {
+        job<EmailConfig> { context, config -> send(config) }
     }
 }
 worker.start(scope)

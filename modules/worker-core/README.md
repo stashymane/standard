@@ -8,10 +8,21 @@ Composable, schedulable workers.
 val store = InMemoryJobStore(Json { ignoreUnknownKeys = true })
 
 val worker = Worker(id = "api-1", store = store) {
-    handlers {
-        handler<EmailConfig> { context, config ->
+    jobs {
+        job<EmailConfig> { context, config ->
             // context.runKey is stable across retries of this occurrence.
-            send(config)
+            send(config.email, config.content)
+        }
+
+        prepared<TimedEmailConfig> { context, config ->
+            val database by resource { Database.connect() }
+                .onDispose { it.close() }
+
+            database.validateEmail(config.email)
+
+            handler {
+                send(config.email, config.content)
+            }
         }
     }
     config {
@@ -31,8 +42,34 @@ worker.enqueue(EmailConfig(...))              // as soon as possible
 worker.enqueue(EmailConfig(...), at = when)  // exact instant
 ```
 
-Handlers are selected by the serial name of their config type. Add `@SerialName` to the config
-class to keep that name stable when the class is moved or renamed.
+Jobs are selected by the serial name of their config type. Add `@SerialName` to the config class to
+keep that name stable when the class is moved or renamed.
+
+## Preparation
+
+A `job` block runs at the scheduled instant.
+
+A `prepared` block runs as soon as the job is claimed, during `prepareWindow`. It must end by
+returning `handler {}`; that block runs at the scheduled instant.
+
+```kotlin
+prepared<TimedEmailConfig> { context, config ->
+    val database by resource { Database.connect() }
+        .onDispose { it.close() }
+
+    database.validateEmail(config.email)
+    handler { send(config.email, config.content) }
+}
+```
+
+## Resources
+
+Both `job` and `prepared` blocks can use `resource` and `defer`:
+
+- `resource { ... }` acquires a resource immediately. `onDispose { ... }` registers its cleanup.
+- `defer { ... }` registers an action to perform after the job is completed or failed.
+- Resources are disposed in reverse acquisition order.
+- If preparation itself fails, resources acquired so far are disposed before the job retries.
 
 ## Scheduling
 
@@ -47,6 +84,9 @@ class to keep that name stable when the class is moved or renamed.
 
 Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or rescheduling rows
 outside `Worker.sync`.
+
+`prepareWindow` should cover the time a prepared handler needs to finish preparation. A prepared job
+keeps its `maxConcurrentJobs` slot while waiting, so that execution can start on time.
 
 ## Multi-server behavior
 

@@ -1,7 +1,6 @@
 package dev.stashy.worker.exposed
 
 import dev.stashy.worker.Worker
-import dev.stashy.worker.handler
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobStore
 import dev.stashy.worker.job.LateExecutionPolicy
@@ -175,8 +174,8 @@ class ExposedJobStoreTest {
         h2Store().use { fixture ->
             val executed = CompletableDeferred<String>()
             val worker = Worker(id = "exposed-worker", store = fixture.store) {
-                handlers {
-                    handler<String> { _, config -> executed.complete(config) }
+                jobs {
+                    job<String> { _, config -> executed.complete(config) }
                 }
                 config {
                     pollInterval = 10.milliseconds

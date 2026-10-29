@@ -8,6 +8,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.StringFormat
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.vendors.ForUpdateOption
+import org.jetbrains.exposed.v1.core.vendors.MysqlDialect
+import org.jetbrains.exposed.v1.core.vendors.OracleDialect
+import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
@@ -19,12 +23,23 @@ import kotlin.uuid.Uuid
  * [JobStore] backed by an existing Exposed JDBC [database].
  *
  * The store owns no connections and does not create or migrate [WorkerJobsTable].
+ *
+ * On PostgreSQL, MySQL 8+/MariaDB 10.6+, and Oracle, claim candidates are selected with
+ * `FOR UPDATE SKIP LOCKED` so concurrent workers claim disjoint jobs. Other dialects fall back to
+ * optimistic updates that skip rows claimed concurrently.
  */
 public class ExposedJobStore(
     private val database: Database,
     private val format: StringFormat,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : JobStore {
+    private val claimLockOption: ForUpdateOption? = when (database.dialect) {
+        is PostgreSQLDialect -> ForUpdateOption.PostgreSQL.ForUpdate(ForUpdateOption.PostgreSQL.MODE.SKIP_LOCKED)
+        is MysqlDialect -> ForUpdateOption.MySQL.ForUpdate(ForUpdateOption.MySQL.MODE.SKIP_LOCKED)
+        is OracleDialect -> ForUpdateOption.Oracle.ForUpdateSkipLocked
+        else -> null
+    }
+
     /**
      * Creates [WorkerJobsTable] when the application does not manage schema elsewhere.
      */
@@ -143,11 +158,13 @@ public class ExposedJobStore(
             }
             .orderBy(WorkerJobsTable.nextRunAt to SortOrder.ASC)
             .limit(limit)
+            .let { query -> claimLockOption?.let(query::forUpdate) ?: query }
             .map { it[WorkerJobsTable.id] }
 
         candidateIds.mapNotNull { id ->
             val token = Uuid.random().toString()
             val leaseUntil = request.now + request.lease
+
             val updated = WorkerJobsTable.update({
                 (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq Job.Status.PENDING.name)
             }) {
@@ -155,8 +172,6 @@ public class ExposedJobStore(
             }
             if (updated != 1) return@mapNotNull null
 
-            // Re-read the row the guarded update won: the attempt counter and scheduled instant
-            // are exactly what was committed.
             val job = WorkerJobsTable.selectAll()
                 .where { WorkerJobsTable.id eq id }
                 .single()

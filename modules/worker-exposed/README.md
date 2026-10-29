@@ -27,3 +27,8 @@ optional convenience for applications without a migration system.
 
 The module is JDBC-only. The store encodes handler configs and job metadata with the supplied
 `StringFormat`, and uses Exposed's `timestamp()` columns for `kotlin.time.Instant`.
+
+On PostgreSQL, MySQL 8+/MariaDB 10.6+, and Oracle, claim candidates are selected with
+`FOR UPDATE SKIP LOCKED`, so concurrent workers claim disjoint jobs without colliding on the
+earliest due rows. Other dialects (H2, SQLite, SQL Server) use optimistic updates that skip rows
+claimed concurrently — correct, but less efficient under heavy multi-worker contention.

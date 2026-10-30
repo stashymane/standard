@@ -1,10 +1,10 @@
 package dev.stashy.worker.exposed
 
-import dev.stashy.worker.job.ConfigCodec
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.QueuedJob
-import dev.stashy.worker.job.StringConfigCodec
+import dev.stashy.worker.store.ConfigCodec
+import dev.stashy.worker.store.JobQueue
+import dev.stashy.worker.store.StringConfigCodec
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

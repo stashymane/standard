@@ -1,10 +1,10 @@
 package dev.stashy.worker.ktor
 
-import dev.stashy.worker.JobsRegistry
+import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
-import dev.stashy.worker.job.JobHistory
-import dev.stashy.worker.job.JobQueue
+import dev.stashy.worker.store.JobHistory
+import dev.stashy.worker.store.JobQueue
 import kotlin.uuid.Uuid
 
 /**

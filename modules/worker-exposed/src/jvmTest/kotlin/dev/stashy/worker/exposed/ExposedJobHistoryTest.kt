@@ -2,7 +2,7 @@ package dev.stashy.worker.exposed
 
 import dev.stashy.worker.Worker
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobHistory
+import dev.stashy.worker.store.JobHistory
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest

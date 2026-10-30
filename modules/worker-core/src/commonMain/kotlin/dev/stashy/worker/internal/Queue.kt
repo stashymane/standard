@@ -1,8 +1,11 @@
-package dev.stashy.worker
+package dev.stashy.worker.internal
 
+import dev.stashy.worker.WorkerConfig
+import dev.stashy.worker.WorkerLogger
+import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobHistory
-import dev.stashy.worker.job.JobQueue
+import dev.stashy.worker.store.JobHistory
+import dev.stashy.worker.store.JobQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

@@ -1,7 +1,9 @@
 package dev.stashy.worker
 
-import dev.stashy.worker.job.JobHistory
-import dev.stashy.worker.job.JobQueue
+import dev.stashy.worker.handler.JobsRegistry
+import dev.stashy.worker.internal.Queue
+import dev.stashy.worker.store.JobHistory
+import dev.stashy.worker.store.JobQueue
 
 /**
  * Configuration DSL for [Worker].

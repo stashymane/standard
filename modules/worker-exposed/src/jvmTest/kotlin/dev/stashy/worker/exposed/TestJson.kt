@@ -1,7 +1,7 @@
 package dev.stashy.worker.exposed
 
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobQueue
+import dev.stashy.worker.store.JobQueue
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlin.time.Instant

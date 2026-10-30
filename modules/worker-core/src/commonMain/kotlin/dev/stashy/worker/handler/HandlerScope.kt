@@ -1,4 +1,4 @@
-package dev.stashy.worker
+package dev.stashy.worker.handler
 
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KProperty

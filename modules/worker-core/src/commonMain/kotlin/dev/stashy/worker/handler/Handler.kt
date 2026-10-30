@@ -1,4 +1,4 @@
-package dev.stashy.worker
+package dev.stashy.worker.handler
 
 import dev.stashy.worker.job.Job
 import kotlinx.coroutines.NonCancellable

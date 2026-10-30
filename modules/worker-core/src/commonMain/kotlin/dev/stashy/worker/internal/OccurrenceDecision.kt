@@ -1,10 +1,10 @@
-package dev.stashy.worker
+package dev.stashy.worker.internal
 
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.schedule.Schedule
 import dev.stashy.worker.schedule.nextOccurrence
+import dev.stashy.worker.store.JobQueue
 import kotlin.time.Instant
 
 /**

@@ -1,6 +1,7 @@
-package dev.stashy.worker
+package dev.stashy.worker.internal
 
-import dev.stashy.worker.job.JobQueue
+import dev.stashy.worker.handler.Handler
+import dev.stashy.worker.store.JobQueue
 import kotlinx.coroutines.CancellationException
 
 internal class HandlerBinding<P : Any>(

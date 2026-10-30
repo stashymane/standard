@@ -1,7 +1,7 @@
 package dev.stashy.worker.ktor
 
-import dev.stashy.worker.job.InMemoryJobHistory
-import dev.stashy.worker.job.InMemoryJobQueue
+import dev.stashy.worker.store.memory.InMemoryJobHistory
+import dev.stashy.worker.store.memory.InMemoryJobQueue
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CompletableDeferred

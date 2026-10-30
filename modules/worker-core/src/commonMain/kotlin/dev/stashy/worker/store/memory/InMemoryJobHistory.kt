@@ -1,5 +1,6 @@
-package dev.stashy.worker.job
+package dev.stashy.worker.store.memory
 
+import dev.stashy.worker.store.JobHistory
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.update
 import kotlin.time.Instant

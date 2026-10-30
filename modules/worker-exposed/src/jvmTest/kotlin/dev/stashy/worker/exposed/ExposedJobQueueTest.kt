@@ -2,11 +2,11 @@ package dev.stashy.worker.exposed
 
 import dev.stashy.worker.Worker
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.schedule.Schedule
+import dev.stashy.worker.store.JobQueue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

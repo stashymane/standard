@@ -1,14 +1,15 @@
 package dev.stashy.worker
 
-import dev.stashy.worker.job.InMemoryJobHistory
-import dev.stashy.worker.job.InMemoryJobQueue
+import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobHistory
-import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.schedule.Schedule
+import dev.stashy.worker.store.JobHistory
+import dev.stashy.worker.store.JobQueue
+import dev.stashy.worker.store.memory.InMemoryJobHistory
+import dev.stashy.worker.store.memory.InMemoryJobQueue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher

@@ -1,5 +1,7 @@
-package dev.stashy.worker.job
+package dev.stashy.worker.store.memory
 
+import dev.stashy.worker.job.Job
+import dev.stashy.worker.store.JobHistory
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds

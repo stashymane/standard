@@ -1,4 +1,4 @@
-package dev.stashy.worker.job
+package dev.stashy.worker.store
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.StringFormat

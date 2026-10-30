@@ -1,6 +1,6 @@
 package dev.stashy.worker.exposed
 
-import dev.stashy.worker.job.JobHistory
+import dev.stashy.worker.store.JobHistory
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.datetime.timestamp

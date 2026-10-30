@@ -1,11 +1,12 @@
 package dev.stashy.worker
 
+import dev.stashy.worker.internal.Queue
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobBuilder
-import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.defineJob
 import dev.stashy.worker.schedule.Schedule
 import dev.stashy.worker.schedule.firstOccurrence
+import dev.stashy.worker.store.JobQueue
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.*
 import kotlinx.serialization.KSerializer

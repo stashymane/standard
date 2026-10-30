@@ -1,4 +1,7 @@
-package dev.stashy.worker
+package dev.stashy.worker.handler
+
+import dev.stashy.worker.internal.HandlerBinding
+import dev.stashy.worker.internal.handlerBinding
 
 /**
  * Registry of the jobs a worker is able to execute.
@@ -18,7 +21,7 @@ public class JobsRegistry<P : Any> internal constructor(
     public inline fun <reified C : Any> job(
         noinline block: suspend HandlerScope.(Handler.Context, C) -> Unit,
     ): Unit {
-        register(dev.stashy.worker.job(block))
+        register(dev.stashy.worker.handler.job(block))
     }
 
     /**
@@ -27,7 +30,7 @@ public class JobsRegistry<P : Any> internal constructor(
     public inline fun <reified C : Any> prepared(
         noinline block: suspend PreparationScope.(Handler.Context, C) -> Handler.Execution,
     ): Unit {
-        register(dev.stashy.worker.prepared(block))
+        register(dev.stashy.worker.handler.prepared(block))
     }
 
     public fun <C : Any> register(handler: Handler<C>): Unit {

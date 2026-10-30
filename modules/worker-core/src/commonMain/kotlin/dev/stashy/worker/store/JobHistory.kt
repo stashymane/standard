@@ -1,5 +1,6 @@
-package dev.stashy.worker.job
+package dev.stashy.worker.store
 
+import dev.stashy.worker.job.Job
 import kotlin.time.Instant
 
 /**

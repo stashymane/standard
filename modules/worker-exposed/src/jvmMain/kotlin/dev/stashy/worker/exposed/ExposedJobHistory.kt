@@ -1,6 +1,6 @@
 package dev.stashy.worker.exposed
 
-import dev.stashy.worker.job.JobHistory
+import dev.stashy.worker.store.JobHistory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

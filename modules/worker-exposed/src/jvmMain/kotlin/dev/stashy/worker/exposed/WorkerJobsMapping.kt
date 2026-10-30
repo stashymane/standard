@@ -12,7 +12,7 @@ import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import kotlin.time.Instant
 
 internal fun ResultRow.toJob(format: StringFormat): Job {
-    val status = Job.Status.valueOf(this[WorkerJobsTable.status])
+    val status = this[WorkerJobsTable.status]
     val lock = if (status == Job.Status.RUNNING) {
         Job.Lock(
             token = this[WorkerJobsTable.lockToken] ?: error("Running job is missing its lock token"),
@@ -58,7 +58,7 @@ internal fun UpdateBuilder<*>.setDefinitionReset(
     format: StringFormat,
 ) {
     setDefinition(definition, payload, format)
-    this[WorkerJobsTable.status] = Job.Status.PENDING.name
+    this[WorkerJobsTable.status] = Job.Status.PENDING
     this[WorkerJobsTable.scheduledAt] = nextRunAt
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     this[WorkerJobsTable.attempt] = 0
@@ -70,7 +70,7 @@ internal fun UpdateBuilder<*>.setClaim(
     token: String,
     leaseUntil: Instant,
 ) {
-    this[WorkerJobsTable.status] = Job.Status.RUNNING.name
+    this[WorkerJobsTable.status] = Job.Status.RUNNING
     this[WorkerJobsTable.lockedBy] = workerId
     this[WorkerJobsTable.lockToken] = token
     this[WorkerJobsTable.leaseExpiresAt] = leaseUntil
@@ -82,7 +82,7 @@ internal fun UpdateBuilder<*>.setLease(leaseUntil: Instant) {
 }
 
 internal fun UpdateBuilder<*>.setCompletion(nextRunAt: Instant) {
-    this[WorkerJobsTable.status] = Job.Status.PENDING.name
+    this[WorkerJobsTable.status] = Job.Status.PENDING
     this[WorkerJobsTable.scheduledAt] = nextRunAt
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     this[WorkerJobsTable.attempt] = 0
@@ -90,7 +90,7 @@ internal fun UpdateBuilder<*>.setCompletion(nextRunAt: Instant) {
 }
 
 internal fun UpdateBuilder<*>.setReschedule(nextRunAt: Instant) {
-    this[WorkerJobsTable.status] = Job.Status.PENDING.name
+    this[WorkerJobsTable.status] = Job.Status.PENDING
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     clearLock()
 }

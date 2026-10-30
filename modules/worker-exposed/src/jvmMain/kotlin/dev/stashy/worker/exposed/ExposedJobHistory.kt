@@ -32,7 +32,7 @@ public class ExposedJobHistory(
             it[scheduledAt] = entry.scheduledAt
             it[startedAt] = entry.startedAt
             it[finishedAt] = entry.finishedAt
-            it[status] = entry.status.name
+            it[status] = entry.status
             it[error] = entry.error
         }
     }
@@ -43,7 +43,7 @@ public class ExposedJobHistory(
                 var condition: Op<Boolean> = Op.TRUE
                 filter.jobId?.let { condition = condition and (WorkerJobHistoryTable.jobId eq it.value) }
                 filter.handlerId?.let { condition = condition and (WorkerJobHistoryTable.handlerId eq it) }
-                filter.status?.let { condition = condition and (WorkerJobHistoryTable.status eq it.name) }
+                filter.status?.let { condition = condition and (WorkerJobHistoryTable.status eq it) }
                 condition
             }
             .orderBy(WorkerJobHistoryTable.finishedAt to SortOrder.ASC)

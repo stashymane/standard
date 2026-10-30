@@ -1,5 +1,6 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.job.Job
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.datetime.timestamp
@@ -16,7 +17,7 @@ public object WorkerJobsTable : Table("worker_jobs") {
     public val payload: Column<String> = text("payload")
     public val schedule: Column<String> = text("schedule")
     public val enabled: Column<Boolean> = bool("enabled")
-    public val status: Column<String> = varchar("status", 16)
+    public val status: Column<Job.Status> = enumerationByName("status", 16)
     public val scheduledAt: Column<Instant> = timestamp("scheduled_at")
     public val nextRunAt: Column<Instant?> = timestamp("next_run_at").nullable()
     public val attempt: Column<Int> = integer("attempt")

@@ -61,7 +61,7 @@ public class ExposedJobQueue(
             .where {
                 var condition: Op<Boolean> = Op.TRUE
                 if (statuses != null) {
-                    condition = condition and (WorkerJobsTable.status inList statuses.map { it.name })
+                    condition = condition and (WorkerJobsTable.status inList statuses)
                 }
                 if (handlerId != null) {
                     condition = condition and (WorkerJobsTable.handlerId eq handlerId)
@@ -86,7 +86,7 @@ public class ExposedJobQueue(
                 WorkerJobsTable.insert {
                     it[WorkerJobsTable.id] = definition.id.value
                     it.setDefinition(definition, payload, format)
-                    it[WorkerJobsTable.status] = Job.Status.PENDING.name
+                    it[WorkerJobsTable.status] = Job.Status.PENDING
                     it[WorkerJobsTable.scheduledAt] = scheduledAt
                     it[WorkerJobsTable.nextRunAt] = scheduledAt
                     it[WorkerJobsTable.attempt] = 0
@@ -112,7 +112,7 @@ public class ExposedJobQueue(
             if (nextRunAt != null) {
                 val reset = WorkerJobsTable.update({
                     (WorkerJobsTable.id eq definition.id.value) and
-                            (WorkerJobsTable.status neq Job.Status.RUNNING.name)
+                            (WorkerJobsTable.status neq Job.Status.RUNNING)
                 }) {
                     it.setDefinitionReset(definition, payload, nextRunAt, format)
                 }
@@ -139,7 +139,7 @@ public class ExposedJobQueue(
 
     override suspend fun delete(id: Job.Id): Boolean = transaction {
         WorkerJobsTable.deleteWhere {
-            (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status neq Job.Status.RUNNING.name)
+            (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status neq Job.Status.RUNNING)
         } > 0
     }
 
@@ -148,7 +148,7 @@ public class ExposedJobQueue(
         val horizon = request.now + request.prepareWindow
         val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
             .where {
-                (WorkerJobsTable.status eq Job.Status.PENDING.name) and
+                (WorkerJobsTable.status eq Job.Status.PENDING) and
                         (WorkerJobsTable.enabled eq true) and
                         (WorkerJobsTable.handlerId inList request.supportedHandlerIds) and
                         (WorkerJobsTable.nextRunAt lessEq horizon)
@@ -163,7 +163,7 @@ public class ExposedJobQueue(
             val leaseUntil = request.now + request.lease
 
             val updated = WorkerJobsTable.update({
-                (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq Job.Status.PENDING.name)
+                (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq Job.Status.PENDING)
             }) {
                 it.setClaim(request.workerId, token, leaseUntil)
             }
@@ -211,7 +211,7 @@ public class ExposedJobQueue(
     override suspend fun expired(now: Instant, limit: Int): List<JobQueue.Claimed> = transaction {
         WorkerJobsTable.selectAll()
             .where {
-                (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
+                (WorkerJobsTable.status eq Job.Status.RUNNING) and
                         (WorkerJobsTable.leaseExpiresAt lessEq now)
             }
             .orderBy(WorkerJobsTable.leaseExpiresAt to SortOrder.ASC)
@@ -229,13 +229,13 @@ public class ExposedJobQueue(
 
     private fun ownedBy(claim: JobQueue.Claimed): Op<Boolean> =
         (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
+                (WorkerJobsTable.status eq Job.Status.RUNNING) and
                 (WorkerJobsTable.lockToken eq claim.lockToken)
 
     private fun JdbcTransaction.deleteOwned(claim: JobQueue.Claimed): Boolean =
         WorkerJobsTable.deleteWhere {
             (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                    (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
+                    (WorkerJobsTable.status eq Job.Status.RUNNING) and
                     (WorkerJobsTable.lockToken eq claim.lockToken)
         } > 0
 

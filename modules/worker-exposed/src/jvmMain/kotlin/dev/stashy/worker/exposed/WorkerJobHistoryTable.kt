@@ -1,5 +1,6 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.job.JobHistory
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.datetime.timestamp
@@ -18,7 +19,7 @@ public object WorkerJobHistoryTable : Table("worker_job_history") {
     public val scheduledAt: Column<Instant> = timestamp("scheduled_at")
     public val startedAt: Column<Instant> = timestamp("started_at")
     public val finishedAt: Column<Instant> = timestamp("finished_at")
-    public val status: Column<String> = varchar("status", 16)
+    public val status: Column<JobHistory.Status> = enumerationByName("status", 16)
     public val error: Column<String?> = text("error").nullable()
 
     override val primaryKey: PrimaryKey = PrimaryKey(id)

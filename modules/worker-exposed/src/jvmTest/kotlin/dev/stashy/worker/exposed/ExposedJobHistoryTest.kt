@@ -24,7 +24,7 @@ class ExposedJobHistoryTest {
     @Test
     fun `records and lists entries`() = runTest {
         val history = h2History()
-        val entry = entry()
+        val entry = entry(message = "done")
 
         history.record(entry)
 
@@ -107,6 +107,7 @@ class ExposedJobHistoryTest {
         attempt: Int = 1,
         status: JobHistory.Status = JobHistory.Status.SUCCEEDED,
         finishedAt: Instant = now + attempt.seconds,
+        message: String? = null,
     ): JobHistory.Entry = JobHistory.Entry(
         jobId = jobId,
         handlerId = handlerId,
@@ -115,6 +116,7 @@ class ExposedJobHistoryTest {
         startedAt = now,
         finishedAt = finishedAt,
         status = status,
+        message = message,
     )
 
     private companion object {

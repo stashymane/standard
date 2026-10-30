@@ -9,7 +9,7 @@ class InMemoryJobHistoryTest {
     @Test
     fun `records and lists entries`() = runTest {
         val history = InMemoryJobHistory()
-        val entry = entry(attempt = 1)
+        val entry = entry(attempt = 1, message = "done")
 
         history.record(entry)
 
@@ -63,6 +63,7 @@ class InMemoryJobHistoryTest {
         attempt: Int = 1,
         status: JobHistory.Status = JobHistory.Status.SUCCEEDED,
         finishedAt: Instant = now + attempt.seconds,
+        message: String? = null,
     ): JobHistory.Entry = JobHistory.Entry(
         jobId = jobId,
         handlerId = handlerId,
@@ -71,6 +72,7 @@ class InMemoryJobHistoryTest {
         startedAt = now,
         finishedAt = finishedAt,
         status = status,
+        message = message,
     )
 
     private companion object {

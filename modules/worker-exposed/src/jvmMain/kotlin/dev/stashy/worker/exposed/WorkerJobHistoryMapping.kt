@@ -12,5 +12,5 @@ internal fun ResultRow.toEntry(): JobHistory.Entry = JobHistory.Entry(
     startedAt = this[WorkerJobHistoryTable.startedAt],
     finishedAt = this[WorkerJobHistoryTable.finishedAt],
     status = this[WorkerJobHistoryTable.status],
-    error = this[WorkerJobHistoryTable.error],
+    message = this[WorkerJobHistoryTable.message],
 )

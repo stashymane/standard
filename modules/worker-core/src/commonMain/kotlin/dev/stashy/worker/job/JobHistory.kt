@@ -26,7 +26,10 @@ public interface JobHistory {
         public val startedAt: Instant,
         public val finishedAt: Instant,
         public val status: Status,
-        public val error: String? = null,
+        /**
+         * Short status message, such as a failure reason. Null when there is nothing to report.
+         */
+        public val message: String? = null,
     )
 
     public enum class Status {

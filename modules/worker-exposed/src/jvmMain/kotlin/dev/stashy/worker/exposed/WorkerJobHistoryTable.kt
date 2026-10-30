@@ -20,7 +20,7 @@ public object WorkerJobHistoryTable : Table("worker_job_history") {
     public val startedAt: Column<Instant> = timestamp("started_at")
     public val finishedAt: Column<Instant> = timestamp("finished_at")
     public val status: Column<JobHistory.Status> = enumerationByName("status", 16)
-    public val error: Column<String?> = text("error").nullable()
+    public val message: Column<String?> = text("message").nullable()
 
     override val primaryKey: PrimaryKey = PrimaryKey(id)
 

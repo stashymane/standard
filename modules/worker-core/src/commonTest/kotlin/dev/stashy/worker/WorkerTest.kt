@@ -67,7 +67,7 @@ class WorkerTest {
         assertEquals(Job.Id("job"), entry.jobId)
         assertEquals(1, entry.attempt)
         assertEquals(JobHistory.Status.SUCCEEDED, entry.status)
-        assertNull(entry.error)
+        assertNull(entry.message)
         worker.stop()
     }
 
@@ -399,7 +399,7 @@ class WorkerTest {
         assertEquals(Instant.fromEpochMilliseconds(40_000), job.nextRun)
         val entry = assertNotNull(history.list().singleOrNull())
         assertEquals(JobHistory.Status.FAILED, entry.status)
-        assertEquals("Attempts exhausted: boom", entry.error)
+        assertEquals("Attempts exhausted: boom", entry.message)
 
         worker.stop()
     }
@@ -450,7 +450,7 @@ class WorkerTest {
         assertEquals(Instant.fromEpochMilliseconds(8_000), job.nextRun)
         val entry = assertNotNull(history.list().singleOrNull())
         assertEquals(JobHistory.Status.FAILED, entry.status)
-        assertEquals("Lease expired after 1 attempt(s)", entry.error)
+        assertEquals("Lease expired after 1 attempt(s)", entry.message)
 
         worker.stop()
     }
@@ -509,7 +509,7 @@ class WorkerTest {
         assertNull(store.get(Job.Id("job")))
         assertEquals(
             "Next attempt would start 10s after its scheduled instant: boom",
-            assertNotNull(history.list().singleOrNull()).error,
+            assertNotNull(history.list().singleOrNull()).message,
         )
         worker.stop()
     }

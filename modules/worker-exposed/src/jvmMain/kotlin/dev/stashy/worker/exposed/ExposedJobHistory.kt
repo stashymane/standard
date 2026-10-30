@@ -33,7 +33,7 @@ public class ExposedJobHistory(
             it[startedAt] = entry.startedAt
             it[finishedAt] = entry.finishedAt
             it[status] = entry.status
-            it[error] = entry.error
+            it[message] = entry.message
         }
     }
 

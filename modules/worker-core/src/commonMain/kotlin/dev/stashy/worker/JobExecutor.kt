@@ -179,7 +179,7 @@ internal class JobExecutor(
             } else {
                 JobHistory.Status.FAILED
             },
-            error = decision.error,
+            message = decision.error,
         )
         attemptStore("Could not record history for job '${entry.jobId.value}'") { history.record(entry) }
     }

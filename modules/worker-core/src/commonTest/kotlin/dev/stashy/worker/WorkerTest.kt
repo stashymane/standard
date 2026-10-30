@@ -752,13 +752,52 @@ class WorkerTest {
     }
 
     @Test
-    fun `the same queue cannot be registered twice`() {
-        val queue = InMemoryJobQueue(TestJson)
+    fun `the same queue can be used by multiple job blocks`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val stringsHistory = InMemoryJobHistory()
+        val intsHistory = InMemoryJobHistory()
+        val executed = mutableListOf<String>()
+        val worker = Worker(id = "worker") {
+            jobs(store, stringsHistory) {
+                job<String> { _, config -> executed += config }
+            }
+            jobs(store, intsHistory) {
+                job<Int> { _, config -> executed += config.toString() }
+            }
+            config {
+                pollInterval = 10.seconds
+                prepareWindow = 10.seconds
+                leaseDuration = 1.minutes
+                heartbeatInterval = 20.seconds
+                maxConcurrentJobs = 4
+                shutdownGracePeriod = 1.seconds
+                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                this.clock = clock
+                dispatcher = StandardTestDispatcher(testScheduler)
+            }
+        }
+
+        worker.enqueue("shared", at = clock.now())
+        worker.enqueue(42, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(setOf("shared", "42"), executed.toSet())
+        assertEquals(listOf("kotlin.String"), stringsHistory.list().map { it.handlerId })
+        assertEquals(listOf("kotlin.Int"), intsHistory.list().map { it.handlerId })
+        assertTrue(store.list().isEmpty())
+        worker.stop()
+    }
+
+    @Test
+    fun `handlers stay unique across blocks using the same queue`() {
+        val store = InMemoryJobQueue(TestJson)
 
         assertFailsWith<IllegalArgumentException> {
             Worker(id = "worker") {
-                jobs(queue) { job<Unit> { _, _ -> } }
-                jobs(queue) { job<Long> { _, _ -> } }
+                jobs(store) { job<Unit> { _, _ -> } }
+                jobs(store) { job<Unit> { _, _ -> } }
             }
         }
     }
@@ -813,6 +852,49 @@ class WorkerTest {
         val worker = Worker(id = "worker") {
             jobs(first) { job<String> { _, _ -> runJob() } }
             jobs(second) { job<Int> { _, _ -> runJob() } }
+            config {
+                pollInterval = 10.seconds
+                prepareWindow = 10.seconds
+                leaseDuration = 1.minutes
+                heartbeatInterval = 20.seconds
+                maxConcurrentJobs = 1
+                shutdownGracePeriod = 1.seconds
+                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                this.clock = clock
+                dispatcher = StandardTestDispatcher(testScheduler)
+            }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue(2, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(2, peak)
+
+        gate.complete(Unit)
+        runCurrent()
+        worker.stop()
+    }
+
+    @Test
+    fun `concurrency limit applies per job block sharing a store`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val gate = CompletableDeferred<Unit>()
+        var running = 0
+        var peak = 0
+
+        suspend fun runJob() {
+            running++
+            peak = maxOf(peak, running)
+            gate.await()
+            running--
+        }
+
+        val worker = Worker(id = "worker") {
+            jobs(store) { job<String> { _, _ -> runJob() } }
+            jobs(store) { job<Int> { _, _ -> runJob() } }
             config {
                 pollInterval = 10.seconds
                 prepareWindow = 10.seconds

@@ -9,7 +9,8 @@ import dev.stashy.worker.store.JobQueue
  * Configuration DSL for [Worker].
  *
  * Each [jobs] block binds a [JobQueue] to the handlers it may execute, optionally recording their
- * execution history.
+ * execution history. Several blocks may use the same queue, each with independent concurrency and
+ * history.
  */
 public class WorkerBuilder internal constructor() {
     internal val bindings = mutableListOf<QueueBinding<*>>()
@@ -21,18 +22,15 @@ public class WorkerBuilder internal constructor() {
      * Registers jobs that run against [queue] and optionally records their attempts in [history].
      *
      * A worker may use several queues, for example a shared queue for cluster-wide work and an
-     * in-memory queue for node-local jobs. A handler may only be registered once across all
-     * queues, and [queue] may only be passed to one [jobs] block. [history] may be shared between
-     * blocks.
+     * in-memory queue for node-local jobs. A handler may only be registered once across all blocks.
+     * [queue] may be passed to several [jobs] blocks; each block has its own [history] and tracks
+     * concurrency independently.
      */
     public fun jobs(
         queue: JobQueue<*>,
         history: JobHistory? = null,
         configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
-        require(bindings.none { it.queue === queue }) {
-            "Jobs for this JobQueue are already registered"
-        }
         bindings += binding(queue, history, configure)
     }
 

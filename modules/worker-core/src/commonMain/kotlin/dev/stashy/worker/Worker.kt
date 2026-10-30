@@ -20,10 +20,11 @@ import kotlinx.coroutines.Job as CoroutineJob
  * Polls one or more [JobQueue]s, claims due jobs, and delegates execution to a [JobExecutor] per
  * queue.
  *
- * Each [WorkerBuilder.jobs] block binds a queue to the handlers that queue may execute. Jobs are
- * selected by the serial name of their config type. [start] may be used by any coroutine host; the
- * Ktor integration uses the application scope so that shutdown cancels the worker and its graceful
- * cleanup is awaited.
+ * Each [WorkerBuilder.jobs] block binds a queue to the handlers that queue may execute. Several
+ * blocks may use the same queue with independent concurrency and history. Jobs are selected by the
+ * serial name of their config type. [start] may be used by any coroutine host; the Ktor integration
+ * uses the application scope so that shutdown cancels the worker and its graceful cleanup is
+ * awaited.
  */
 public class Worker internal constructor(
     public val id: String,

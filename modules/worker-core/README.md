@@ -46,7 +46,7 @@ keep that name stable when the class is moved or renamed.
 ## Queues and history
 
 Each `jobs(queue) { ... }` block binds a `JobQueue` to the handlers it may execute. A worker can use
-several queues, and `maxConcurrentJobs` applies to each queue independently:
+several queues, and `maxConcurrentJobs` applies to each block independently:
 
 ```kotlin
 val worker = Worker(id = "api-1") {
@@ -78,8 +78,8 @@ val worker = Worker(id = "api-1") {
 ```
 
 History is optional and write-only by default; `JobHistory.Readable` adds `list` for querying.
-A handler may only be registered once across all queues, and the same queue may only be passed to
-one `jobs` block. A history may be shared between blocks.
+A handler may only be registered once across all queues and blocks, and each block records to its
+configured history.
 
 ## Preparation
 

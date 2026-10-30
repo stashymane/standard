@@ -59,6 +59,44 @@ class WorkersPluginTest {
     }
 
     @Test
+    fun `plugin reuses a queue across job blocks`() = testApplication {
+        val queue = InMemoryJobQueue(testFormat)
+        val executed = CompletableDeferred<String>()
+
+        application {
+            install(Workers) {
+                id = "test-worker"
+                jobs(queue) {
+                    job<Unit> { _, _ -> }
+                }
+                jobs(queue) {
+                    job<String> { _, config -> executed.complete(config) }
+                }
+                config {
+                    pollInterval = 10.milliseconds
+                    prepareWindow = 20.milliseconds
+                    leaseDuration = 1.seconds
+                    heartbeatInterval = 300.milliseconds
+                    shutdownGracePeriod = 100.milliseconds
+                }
+            }
+
+            launch {
+                workers.schedule("unit-job", Unit) {
+                    once(Clock.System.now())
+                }
+                workers.schedule("string-job", "reused") {
+                    once(Clock.System.now())
+                }
+            }
+        }
+
+        startApplication()
+
+        assertEquals("reused", withTimeout(5.seconds) { executed.await() })
+    }
+
+    @Test
     fun `plugin routes jobs to their registered queue`() = testApplication {
         val shared = InMemoryJobQueue(testFormat)
         val local = InMemoryJobQueue(testFormat)

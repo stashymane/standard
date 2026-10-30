@@ -35,7 +35,7 @@ public class WorkerConfig internal constructor() {
     public var heartbeatInterval: Duration = 20.seconds
 
     /**
-     * Maximum claimed jobs per store, including prepared, waiting, and executing jobs.
+     * Maximum claimed jobs per `jobs` block, including prepared, waiting, and executing jobs.
      */
     public var maxConcurrentJobs: Int = 8
 

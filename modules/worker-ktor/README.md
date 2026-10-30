@@ -23,4 +23,5 @@ application.launch {
 ```
 
 Each `jobs` block binds a queue to the handlers it may execute and optionally records their history.
-The plugin exposes the running instance through `application.workers`.
+Several blocks may use the same queue, each with its own concurrency and history. The plugin exposes
+the running instance through `application.workers`.

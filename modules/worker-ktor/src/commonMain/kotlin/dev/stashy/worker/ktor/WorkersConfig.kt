@@ -12,7 +12,8 @@ import kotlin.uuid.Uuid
  *
  * Jobs are registered with [jobs], which binds a handler set to a [JobQueue] and optionally records
  * their execution history. Use a database-backed queue for work shared across the cluster and an
- * in-memory queue for node-local jobs.
+ * in-memory queue for node-local jobs. A queue may be used by several [jobs] blocks, each with
+ * independent concurrency and history.
  *
  * Jobs are scheduled through [Worker.schedule] and [Worker.enqueue] after the plugin is installed.
  */
@@ -25,16 +26,13 @@ public class WorkersConfig {
     /**
      * Registers jobs that run against [queue] and optionally records their attempts in [history].
      *
-     * A queue may only be registered once; [history] may be shared between blocks.
+     * A queue may be used by several blocks, each with independent concurrency and history.
      */
     public fun jobs(
         queue: JobQueue<*>,
         history: JobHistory? = null,
         configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
-        require(jobBlocks.none { it.queue === queue }) {
-            "Jobs for this JobQueue are already registered"
-        }
         jobBlocks += JobBlock(queue, history, configure)
     }
 

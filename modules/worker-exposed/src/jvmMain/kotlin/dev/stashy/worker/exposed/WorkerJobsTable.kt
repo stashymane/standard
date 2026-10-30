@@ -6,7 +6,7 @@ import org.jetbrains.exposed.v1.datetime.timestamp
 import kotlin.time.Instant
 
 /**
- * Persistence layout for worker jobs.
+ * Persistence layout for queued worker jobs.
  *
  * Create or migrate this table through the application's existing schema management.
  */
@@ -25,9 +25,6 @@ public object WorkerJobsTable : Table("worker_jobs") {
     public val lockedBy: Column<String?> = varchar("locked_by", 255).nullable()
     public val lockToken: Column<String?> = varchar("lock_token", 64).nullable()
     public val leaseExpiresAt: Column<Instant?> = timestamp("lease_expires_at").nullable()
-    public val lastStartedAt: Column<Instant?> = timestamp("last_started_at").nullable()
-    public val lastFinishedAt: Column<Instant?> = timestamp("last_finished_at").nullable()
-    public val lastError: Column<String?> = text("last_error").nullable()
 
     override val primaryKey: PrimaryKey = PrimaryKey(id)
 

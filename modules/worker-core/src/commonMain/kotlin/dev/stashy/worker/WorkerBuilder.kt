@@ -1,32 +1,39 @@
 package dev.stashy.worker
 
-import dev.stashy.worker.job.JobStore
+import dev.stashy.worker.job.JobHistory
+import dev.stashy.worker.job.JobQueue
 
 /**
  * Configuration DSL for [Worker].
  *
- * Each [jobs] block binds a [JobStore] to the handlers it may execute.
+ * Each [jobs] block binds a [JobQueue] to the handlers it may execute, optionally recording their
+ * execution history.
  */
 public class WorkerBuilder internal constructor() {
-    internal val queues = mutableListOf<Pair<JobStore, JobsRegistry>>()
+    internal val bindings = mutableListOf<QueueBinding>()
     internal val config = WorkerConfig()
 
     private val handlerIds = mutableSetOf<String>()
 
     /**
-     * Registers jobs that run against [store].
+     * Registers jobs that run against [queue] and optionally records their attempts in [history].
      *
-     * A worker may use several stores, for example a shared store for cluster-wide work and an
-     * in-memory store for node-local jobs. A handler may only be registered once across all
-     * stores, and [store] may only be passed to one [jobs] block.
+     * A worker may use several queues, for example a shared queue for cluster-wide work and an
+     * in-memory queue for node-local jobs. A handler may only be registered once across all
+     * queues, and [queue] may only be passed to one [jobs] block. [history] may be shared between
+     * blocks.
      */
-    public fun jobs(store: JobStore, configure: JobsRegistry.() -> Unit): Unit {
-        require(queues.none { it.first === store }) {
-            "Jobs for this JobStore are already registered"
+    public fun jobs(
+        queue: JobQueue,
+        history: JobHistory? = null,
+        configure: JobsRegistry.() -> Unit,
+    ): Unit {
+        require(bindings.none { it.queue === queue }) {
+            "Jobs for this JobQueue are already registered"
         }
         val registry = JobsRegistry(handlerIds)
         registry.configure()
-        queues += store to registry
+        bindings += QueueBinding(queue, history, registry)
     }
 
     /**
@@ -39,6 +46,12 @@ public class WorkerBuilder internal constructor() {
     internal fun build(id: String): Worker = Worker(
         id = id,
         config = config,
-        queues = queues.map { (store, handlers) -> Queue(id, store, handlers, config) },
+        queues = bindings.map { Queue(id, it.queue, it.history, it.handlers, config) },
     )
 }
+
+internal class QueueBinding(
+    val queue: JobQueue,
+    val history: JobHistory?,
+    val handlers: JobsRegistry,
+)

@@ -16,9 +16,6 @@ public data class Job(
     public val nextRun: Instant?,
     public val attempt: Int,
     public val lock: Lock? = null,
-    public val lastStartedAt: Instant? = null,
-    public val lastFinishedAt: Instant? = null,
-    public val lastError: String? = null,
 ) {
     init {
         require((status == Status.RUNNING) == (lock != null)) {
@@ -73,7 +70,5 @@ public data class Job(
 
         /** The job is locked by a worker. */
         RUNNING,
-        COMPLETED,
-        FAILED,
     }
 }

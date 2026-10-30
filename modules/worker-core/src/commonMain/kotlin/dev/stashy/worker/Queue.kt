@@ -1,7 +1,8 @@
 package dev.stashy.worker
 
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobStore
+import dev.stashy.worker.job.JobHistory
+import dev.stashy.worker.job.JobQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -10,15 +11,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job as CoroutineJob
 
 /**
- * A [JobStore] and the handlers it may execute.
+ * A [JobQueue], its optional [JobHistory], and the handlers it may execute.
  */
 internal class Queue(
     private val workerId: String,
-    val store: JobStore,
+    val store: JobQueue,
+    history: JobHistory?,
     val handlers: JobsRegistry,
     private val config: WorkerConfig,
 ) {
-    private val executor = JobExecutor(workerId, store, handlers, config)
+    private val executor = JobExecutor(workerId, store, history, handlers, config)
     val inFlight = mutableMapOf<Job.Id, Execution>()
 
     suspend fun poll(executionScope: CoroutineScope) {
@@ -60,7 +62,7 @@ internal class Queue(
 
         val claimed = try {
             store.claim(
-                JobStore.ClaimRequest(
+                JobQueue.ClaimRequest(
                     now = config.clock.now(),
                     supportedHandlerIds = handlerIds,
                     prepareWindow = config.prepareWindow,
@@ -87,7 +89,7 @@ internal class Queue(
     }
 
     class Execution(
-        val claim: JobStore.Claimed,
+        val claim: JobQueue.Claimed,
         val coroutine: CoroutineJob,
         val started: CompletableDeferred<Unit>,
     )

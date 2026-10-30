@@ -38,9 +38,6 @@ class JobTest {
         nextRun = now,
         attempt = 0,
         lock = lock,
-        lastStartedAt = null,
-        lastFinishedAt = null,
-        lastError = null,
     )
 
     private fun lock(): Job.Lock = Job.Lock("token", "runner", now + 1.seconds)

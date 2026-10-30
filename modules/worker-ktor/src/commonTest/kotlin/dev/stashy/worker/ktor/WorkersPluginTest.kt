@@ -1,6 +1,7 @@
 package dev.stashy.worker.ktor
 
-import dev.stashy.worker.job.InMemoryJobStore
+import dev.stashy.worker.job.InMemoryJobHistory
+import dev.stashy.worker.job.InMemoryJobQueue
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CompletableDeferred
@@ -23,13 +24,13 @@ private val testFormat: Json = Json {
 class WorkersPluginTest {
     @Test
     fun `plugin runs a configured job`() = testApplication {
-        val store = InMemoryJobStore(testFormat)
+        val queue = InMemoryJobQueue(testFormat)
         val executed = CompletableDeferred<Unit>()
 
         application {
             install(Workers) {
                 id = "test-worker"
-                jobs(store) {
+                jobs(queue) {
                     job<Unit> { _, _ -> executed.complete(Unit) }
                 }
                 config {
@@ -58,18 +59,20 @@ class WorkersPluginTest {
     }
 
     @Test
-    fun `plugin routes jobs to their registered store`() = testApplication {
-        val shared = InMemoryJobStore(testFormat)
-        val local = InMemoryJobStore(testFormat)
+    fun `plugin routes jobs to their registered queue`() = testApplication {
+        val shared = InMemoryJobQueue(testFormat)
+        val local = InMemoryJobQueue(testFormat)
+        val sharedHistory = InMemoryJobHistory()
+        val localHistory = InMemoryJobHistory()
         val executed = CompletableDeferred<String>()
 
         application {
             install(Workers) {
                 id = "test-worker"
-                jobs(shared) {
+                jobs(shared, sharedHistory) {
                     job<Unit> { _, _ -> }
                 }
-                jobs(local) {
+                jobs(local, localHistory) {
                     job<String> { _, config -> executed.complete(config) }
                 }
                 config {
@@ -91,15 +94,17 @@ class WorkersPluginTest {
         startApplication()
 
         assertEquals("local", withTimeout(5.seconds) { executed.await() })
+        assertTrue(sharedHistory.list().isEmpty())
+        assertEquals(listOf("kotlin.String"), localHistory.list().map { it.handlerId })
         assertTrue(shared.list().isEmpty())
-        assertTrue(local.list().isNotEmpty())
+        assertTrue(local.list().isEmpty())
     }
 
     @Test
     fun `plugin exposes the worker through the application`() = testApplication {
         application {
             install(Workers) {
-                jobs(InMemoryJobStore(testFormat)) { }
+                jobs(InMemoryJobQueue(testFormat)) { }
                 config {
                     pollInterval = 10.milliseconds
                     prepareWindow = 20.milliseconds

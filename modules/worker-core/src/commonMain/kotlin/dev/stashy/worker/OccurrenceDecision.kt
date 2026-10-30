@@ -1,7 +1,7 @@
 package dev.stashy.worker
 
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobStore
+import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.schedule.Schedule
 import dev.stashy.worker.schedule.nextOccurrence
@@ -15,7 +15,7 @@ import kotlin.time.Instant
  */
 internal sealed interface OccurrenceDecision {
     /**
-     * Recorded as the job's last error; null on a clean completion.
+     * Recorded in job history; null on a clean completion.
      */
     val error: String?
 
@@ -38,14 +38,14 @@ internal sealed interface OccurrenceDecision {
         /**
          * Decision for a successful occurrence: complete it, scheduling the next one when recurring.
          */
-        fun success(claim: JobStore.Claimed, finishedAt: Instant): OccurrenceDecision =
+        fun success(claim: JobQueue.Claimed, finishedAt: Instant): OccurrenceDecision =
             Complete(claim.job.definition.schedule.nextOccurrence(claim.scheduledAt, finishedAt))
 
         /**
          * Decision for a failed occurrence: a retry while attempts remain, unless its instant would
          * violate the late-execution policy; the occurrence ends once attempts are exhausted.
          */
-        fun failure(claim: JobStore.Claimed, now: Instant, error: String): OccurrenceDecision {
+        fun failure(claim: JobQueue.Claimed, now: Instant, error: String): OccurrenceDecision {
             val definition = claim.job.definition
             if (claim.attempt >= definition.retry.maxAttempts) {
                 return terminal(claim, now, "Attempts exhausted: $error")
@@ -63,7 +63,7 @@ internal sealed interface OccurrenceDecision {
          * Ends an occurrence without further attempts: one-shot jobs fail, while recurring jobs
          * advance to their next occurrence with [error] recorded.
          */
-        fun terminal(claim: JobStore.Claimed, now: Instant, error: String): OccurrenceDecision {
+        fun terminal(claim: JobQueue.Claimed, now: Instant, error: String): OccurrenceDecision {
             val next = claim.job.definition.schedule.nextOccurrence(claim.scheduledAt, now)
             return if (next == null) Fail(error) else Complete(next, error)
         }

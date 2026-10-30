@@ -1,7 +1,7 @@
 package dev.stashy.worker.exposed
 
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.JobStore
+import dev.stashy.worker.job.JobQueue
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,19 +20,19 @@ import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
 /**
- * [JobStore] backed by an existing Exposed JDBC [database].
+ * [JobQueue] backed by an existing Exposed JDBC [database].
  *
- * The store owns no connections and does not create or migrate [WorkerJobsTable].
+ * The queue owns no connections and does not create or migrate [WorkerJobsTable].
  *
  * On PostgreSQL, MySQL 8+/MariaDB 10.6+, and Oracle, claim candidates are selected with
  * `FOR UPDATE SKIP LOCKED` so concurrent workers claim disjoint jobs. Other dialects fall back to
  * optimistic updates that skip rows claimed concurrently.
  */
-public class ExposedJobStore(
+public class ExposedJobQueue(
     private val database: Database,
     private val format: StringFormat,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : JobStore {
+) : JobQueue {
     private val claimLockOption: ForUpdateOption? = when (database.dialect) {
         is PostgreSQLDialect -> ForUpdateOption.PostgreSQL.ForUpdate(ForUpdateOption.PostgreSQL.MODE.SKIP_LOCKED)
         is MysqlDialect -> ForUpdateOption.MySQL.ForUpdate(ForUpdateOption.MySQL.MODE.SKIP_LOCKED)
@@ -54,7 +54,7 @@ public class ExposedJobStore(
             ?.toJob(format)
     }
 
-    override suspend fun list(filter: JobStore.Filter): List<Job> = transaction {
+    override suspend fun list(filter: JobQueue.Filter): List<Job> = transaction {
         val statuses = filter.statuses
         val handlerId = filter.handlerId
         WorkerJobsTable.selectAll()
@@ -93,9 +93,6 @@ public class ExposedJobStore(
                     it[WorkerJobsTable.lockedBy] = null
                     it[WorkerJobsTable.lockToken] = null
                     it[WorkerJobsTable.leaseExpiresAt] = null
-                    it[WorkerJobsTable.lastStartedAt] = null
-                    it[WorkerJobsTable.lastFinishedAt] = null
-                    it[WorkerJobsTable.lastError] = null
                 }
                 true
             }
@@ -129,7 +126,7 @@ public class ExposedJobStore(
     }
 
     override suspend fun <C : Any> readConfig(
-        claim: JobStore.Claimed,
+        claim: JobQueue.Claimed,
         serializer: KSerializer<C>,
     ): C = transaction {
         val payload = WorkerJobsTable.select(WorkerJobsTable.payload)
@@ -146,7 +143,7 @@ public class ExposedJobStore(
         } > 0
     }
 
-    override suspend fun claim(request: JobStore.ClaimRequest, limit: Int): List<JobStore.Claimed> = transaction {
+    override suspend fun claim(request: JobQueue.ClaimRequest, limit: Int): List<JobQueue.Claimed> = transaction {
         require(limit >= 1) { "limit must be at least 1" }
         val horizon = request.now + request.prepareWindow
         val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
@@ -168,7 +165,7 @@ public class ExposedJobStore(
             val updated = WorkerJobsTable.update({
                 (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq Job.Status.PENDING.name)
             }) {
-                it.setClaim(request.workerId, token, leaseUntil, request.now)
+                it.setClaim(request.workerId, token, leaseUntil)
             }
             if (updated != 1) return@mapNotNull null
 
@@ -176,7 +173,7 @@ public class ExposedJobStore(
                 .where { WorkerJobsTable.id eq id }
                 .single()
                 .toJob(format)
-            JobStore.Claimed(
+            JobQueue.Claimed(
                 job = job,
                 attempt = job.attempt,
                 scheduledAt = job.scheduledAt ?: job.nextRun ?: request.now,
@@ -185,57 +182,33 @@ public class ExposedJobStore(
         }
     }
 
-    override suspend fun renew(claim: JobStore.Claimed, now: Instant, lease: Duration): Boolean = transaction {
-        WorkerJobsTable.update({
-            (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                    (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
-                    (WorkerJobsTable.lockToken eq claim.lockToken)
-        }) {
+    override suspend fun renew(claim: JobQueue.Claimed, now: Instant, lease: Duration): Boolean = transaction {
+        WorkerJobsTable.update({ ownedBy(claim) }) {
             it.setLease(now + lease)
         } == 1
     }
 
-    override suspend fun complete(
-        claim: JobStore.Claimed,
-        now: Instant,
-        nextRunAt: Instant?,
-        error: String?,
-    ): Boolean = transaction {
-        WorkerJobsTable.update({
-            (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                    (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
-                    (WorkerJobsTable.lockToken eq claim.lockToken)
-        }) {
-            it.setCompletion(nextRunAt, now, error)
+    override suspend fun complete(claim: JobQueue.Claimed, nextRunAt: Instant?): Boolean = transaction {
+        if (nextRunAt == null) {
+            deleteOwned(claim)
+        } else {
+            WorkerJobsTable.update({ ownedBy(claim) }) {
+                it.setCompletion(nextRunAt)
+            } == 1
+        }
+    }
+
+    override suspend fun reschedule(claim: JobQueue.Claimed, nextRunAt: Instant): Boolean = transaction {
+        WorkerJobsTable.update({ ownedBy(claim) }) {
+            it.setReschedule(nextRunAt)
         } == 1
     }
 
-    override suspend fun reschedule(
-        claim: JobStore.Claimed,
-        now: Instant,
-        nextRunAt: Instant,
-        error: String?,
-    ): Boolean = transaction {
-        WorkerJobsTable.update({
-            (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                    (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
-                    (WorkerJobsTable.lockToken eq claim.lockToken)
-        }) {
-            it.setReschedule(nextRunAt, now, error)
-        } == 1
+    override suspend fun fail(claim: JobQueue.Claimed): Boolean = transaction {
+        deleteOwned(claim)
     }
 
-    override suspend fun fail(claim: JobStore.Claimed, now: Instant, error: String?): Boolean = transaction {
-        WorkerJobsTable.update({
-            (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                    (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
-                    (WorkerJobsTable.lockToken eq claim.lockToken)
-        }) {
-            it.setFailure(now, error)
-        } == 1
-    }
-
-    override suspend fun expired(now: Instant, limit: Int): List<JobStore.Claimed> = transaction {
+    override suspend fun expired(now: Instant, limit: Int): List<JobQueue.Claimed> = transaction {
         WorkerJobsTable.selectAll()
             .where {
                 (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
@@ -245,7 +218,7 @@ public class ExposedJobStore(
             .limit(limit)
             .map { row ->
                 val job = row.toJob(format)
-                JobStore.Claimed(
+                JobQueue.Claimed(
                     job = job,
                     attempt = job.attempt,
                     scheduledAt = job.scheduledAt ?: job.nextRun ?: now,
@@ -253,6 +226,18 @@ public class ExposedJobStore(
                 )
             }
     }
+
+    private fun ownedBy(claim: JobQueue.Claimed): Op<Boolean> =
+        (WorkerJobsTable.id eq claim.job.definition.id.value) and
+                (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
+                (WorkerJobsTable.lockToken eq claim.lockToken)
+
+    private fun JdbcTransaction.deleteOwned(claim: JobQueue.Claimed): Boolean =
+        WorkerJobsTable.deleteWhere {
+            (WorkerJobsTable.id eq claim.job.definition.id.value) and
+                    (WorkerJobsTable.status eq Job.Status.RUNNING.name) and
+                    (WorkerJobsTable.lockToken eq claim.lockToken)
+        } > 0
 
     private suspend fun <T> transaction(block: suspend JdbcTransaction.() -> T): T =
         withContext(dispatcher) {

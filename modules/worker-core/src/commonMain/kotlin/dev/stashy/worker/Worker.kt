@@ -2,7 +2,7 @@ package dev.stashy.worker
 
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobBuilder
-import dev.stashy.worker.job.JobStore
+import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.defineJob
 import dev.stashy.worker.schedule.Schedule
 import dev.stashy.worker.schedule.firstOccurrence
@@ -16,10 +16,10 @@ import kotlin.uuid.Uuid
 import kotlinx.coroutines.Job as CoroutineJob
 
 /**
- * Polls one or more [JobStore]s, claims due jobs, and delegates execution to a [JobExecutor] per
- * store.
+ * Polls one or more [JobQueue]s, claims due jobs, and delegates execution to a [JobExecutor] per
+ * queue.
  *
- * Each [WorkerBuilder.jobs] block binds a store to the handlers that store may execute. Jobs are
+ * Each [WorkerBuilder.jobs] block binds a queue to the handlers that queue may execute. Jobs are
  * selected by the serial name of their config type. [start] may be used by any coroutine host; the
  * Ktor integration uses the application scope so that shutdown cancels the worker and its graceful
  * cleanup is awaited.
@@ -90,8 +90,7 @@ public class Worker internal constructor(
     /**
      * Creates [definition] when missing, or updates it when its definition changed.
      *
-     * Runtime state is preserved. A changed schedule resets the next occurrence and attempt count,
-     * but a completed one-shot job stays completed when its definition is unchanged.
+     * Runtime state is preserved. A changed schedule resets the next occurrence and attempt count.
      */
     public suspend inline fun <reified C : Any> sync(
         definition: Job.Definition,

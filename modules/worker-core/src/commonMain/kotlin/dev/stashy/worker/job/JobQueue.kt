@@ -5,7 +5,7 @@ import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
- * Job storage interface.
+ * Queue of pending and running jobs.
  *
  * Implementations used by more than one worker must make [claim] atomic. The contract is:
  *
@@ -19,10 +19,13 @@ import kotlin.time.Instant
  * - [expired] returns recently expired leases without claiming them. Callers transition those jobs
  *   with [reschedule] or [fail], which also guards against another worker acting first.
  *
- * Encoding and decoding handler configs is a store concern. [create] and [updateDefinition] accept
+ * Terminal occurrences leave the queue: [complete] without a next run and [fail] remove the job.
+ * Execution history is recorded separately through [JobHistory].
+ *
+ * Encoding and decoding handler configs is a queue concern. [create] and [updateDefinition] accept
  * a typed config with its serializer, and [readConfig] returns the decoded value for a claimed job.
  */
-public interface JobStore {
+public interface JobQueue {
     /**
      * Criteria for an atomic claim.
      */
@@ -54,7 +57,7 @@ public interface JobStore {
          * Token of the job's current [Job.Lock].
          */
         public val lockToken: String
-            get() = checkNotNull(job.lock) { "A claimed job must be locked" }.token
+            get() = job.lock!!.token
     }
 
     /**
@@ -82,7 +85,7 @@ public interface JobStore {
     /**
      * Creates a pending job at [scheduledAt]. Returns false when the id already exists.
      *
-     * The store persists [config] using [serializer] and its own format.
+     * The queue persists [config] using [serializer] and its own format.
      */
     public suspend fun <C : Any> create(
         definition: Job.Definition,
@@ -135,29 +138,20 @@ public interface JobStore {
     public suspend fun renew(claim: Claimed, now: Instant, lease: Duration): Boolean
 
     /**
-     * Completes an occurrence and schedules [nextRunAt], or marks the job completed when null.
+     * Completes an occurrence and schedules [nextRunAt], or removes the job from the queue when
+     * null.
      */
-    public suspend fun complete(
-        claim: Claimed,
-        now: Instant,
-        nextRunAt: Instant?,
-        error: String? = null,
-    ): Boolean
+    public suspend fun complete(claim: Claimed, nextRunAt: Instant?): Boolean
 
     /**
      * Releases a runnable occurrence for a later attempt without resetting the attempt counter.
      */
-    public suspend fun reschedule(
-        claim: Claimed,
-        now: Instant,
-        nextRunAt: Instant,
-        error: String? = null,
-    ): Boolean
+    public suspend fun reschedule(claim: Claimed, nextRunAt: Instant): Boolean
 
     /**
-     * Marks the job as permanently failed.
+     * Marks the job as permanently failed and removes it from the queue.
      */
-    public suspend fun fail(claim: Claimed, now: Instant, error: String? = null): Boolean
+    public suspend fun fail(claim: Claimed): Boolean
 
     /**
      * Returns jobs whose lease expired at or before [now].

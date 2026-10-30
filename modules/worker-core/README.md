@@ -6,7 +6,7 @@ Composable, schedulable workers.
 
 ```kotlin
 val worker = Worker(id = "api-1") {
-    jobs(LocalJobStore()) {
+    jobs(InMemoryJobQueue(Json)) {
         job<EmailConfig> { context, config ->
             // context.runKey is stable across retries of this occurrence.
             send(config.email, config.content)
@@ -43,30 +43,44 @@ worker.enqueue(EmailConfig(...), at = when)  // exact instant
 Jobs are selected by the serial name of their config type. Add `@SerialName` to the config class to
 keep that name stable when the class is moved or renamed.
 
-## Stores
+## Queues and history
 
-Each `jobs(store) { ... }` block binds a `JobStore` to the handlers it may execute. A worker can use
-several stores, and `maxConcurrentJobs` applies to each store independently. Use a `LocalJobStore`
-for node-local jobs:
+Each `jobs(queue) { ... }` block binds a `JobQueue` to the handlers it may execute. A worker can use
+several queues, and `maxConcurrentJobs` applies to each queue independently:
 
 ```kotlin
 val worker = Worker(id = "api-1") {
-    jobs(sharedStore) {
+    jobs(sharedQueue) {
         job<SendEmail> { context, config -> send(config) }
     }
-    jobs(LocalJobStore()) {
+    jobs(InMemoryJobQueue(Json)) {
         job<PruneCache> { context, config -> cache.evictAll() }
     }
 }
 ```
 
-A `LocalJobStore` keeps jobs on the current node only: configs are held by reference without
-serialization, and terminal jobs are removed instead of retained.
-`InMemoryJobStore` instead retains terminal jobs for inspection and snapshots configs through a
-`StringFormat`, which suits tests.
+A queue only holds pending and running jobs. Terminal occurrences leave it: completed one-shot jobs
+and failed jobs are removed, while a recurring job keeps its single pending row between occurrences.
+`InMemoryJobQueue` snapshots configs through a `StringFormat`, which suits tests and node-local jobs.
 
-A handler may only be registered once across all stores, and the same store may only be passed to
-one `jobs` block.
+Pass a `JobHistory` to record finished attempts:
+
+```kotlin
+val history = InMemoryJobHistory()
+
+val worker = Worker(id = "api-1") {
+    jobs(sharedQueue, history) {
+        job<SendEmail> { context, config -> send(config) }
+    }
+    jobs(localQueue, history) {
+        job<PruneCache> { context, config -> cache.evictAll() }
+    }
+}
+```
+
+History is optional and write-only by default; `JobHistory.Readable` adds `list` for querying.
+A handler may only be registered once across all queues, and the same queue may only be passed to
+one `jobs` block. A history may be shared between blocks.
 
 ## Preparation
 
@@ -110,20 +124,20 @@ Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or r
 outside `Worker.sync`.
 
 `prepareWindow` should cover the time a prepared handler needs to finish preparation. A prepared job
-keeps a slot in its store's `maxConcurrentJobs` while waiting, so that execution can start on time.
+keeps a slot in its queue's `maxConcurrentJobs` while waiting, so that execution can start on time.
 
 ## Multi-server behavior
 
-A job is only executed after `JobStore.claim` atomically assigns it to a worker. The worker renews
+A job is only executed after `JobQueue.claim` atomically assigns it to a worker. The worker renews
 its lease while preparing and executing. If a handler throws, or its lease expires because the
 worker died, the job becomes runnable again after the configured retry delay.
 
 Execution is **at-least-once**. A process can die after performing side effects but before marking
 the job complete, so handlers must be idempotent. Use `Handler.Context.runKey` for deduplication.
 
-## Store contract
+## Queue contract
 
-Database stores must implement these atomicity rules:
+Database queues must implement these atomicity rules:
 
 1. `claim` selects up to `limit` enabled `PENDING` jobs with a supported `handler_id` and
    `next_run_at <= now + prepareWindow`, earliest due first.
@@ -135,14 +149,16 @@ Database stores must implement these atomicity rules:
 5. `expired` returns rows with `status = RUNNING` and `lease_expires_at <= now`. The worker
    conditionally reschedules or fails them; never claim an expired row directly, because the retry
    delay must be respected.
-6. A `RUNNING` job always has a complete lock: token, owner, and expiration are all present. Stores
+6. A `RUNNING` job always has a complete lock: token, owner, and expiration are all present. Queues
    should map the three lock columns together so a partial lock cannot be persisted.
-7. `create` and `updateDefinition` receive a typed config with its serializer; the store encodes it
+7. `complete` without a next run and `fail` remove the row; `complete` with a next run and
+   `reschedule` return the row to `PENDING`.
+8. `create` and `updateDefinition` receive a typed config with its serializer; the queue encodes it
    with its own format. `readConfig` decodes a claimed job's config with the handler's serializer.
 
-`worker-exposed` provides an Exposed-based implementation of this contract.
+`worker-exposed` provides Exposed-based implementations of this contract and of `JobHistory`.
 
-`payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The store encodes
+`payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The queue encodes
 handler configs with its own `StringFormat`; the definition itself contains no payload. A JSON
 definition looks like:
 
@@ -169,4 +185,5 @@ definition looks like:
 }
 ```
 
-Completed and failed rows are retained for inspection; pruning them is the store's responsibility.
+Execution records live in `JobHistory`, not in the queue. Pruning history is the history store's
+responsibility.

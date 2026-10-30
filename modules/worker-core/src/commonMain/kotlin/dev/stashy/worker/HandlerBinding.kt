@@ -1,15 +1,15 @@
 package dev.stashy.worker
 
-import dev.stashy.worker.job.JobStore
+import dev.stashy.worker.job.JobQueue
 import kotlinx.coroutines.CancellationException
 
 internal class HandlerBinding(
     val id: String,
-    private val prepareExecution: suspend (JobStore, JobStore.Claimed, Handler.Context) -> Handler.Prepared,
+    private val prepareExecution: suspend (JobQueue, JobQueue.Claimed, Handler.Context) -> Handler.Prepared,
 ) {
     suspend fun prepare(
-        store: JobStore,
-        claim: JobStore.Claimed,
+        store: JobQueue,
+        claim: JobQueue.Claimed,
         context: Handler.Context,
     ): Handler.Prepared = prepareExecution(store, claim, context)
 }

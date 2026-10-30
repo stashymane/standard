@@ -6,26 +6,28 @@ Exposed JDBC persistence for `worker-core`.
 
 ```kotlin
 val database = Database.connect(dataSource)
-val store = ExposedJobStore(database, Json)
+val queue = ExposedJobQueue(database, Json)
+val history = ExposedJobHistory(database)
 
 // Run once through the application's migration flow, before starting the worker.
 transaction(database) {
-    SchemaUtils.create(WorkerJobsTable)
+    SchemaUtils.create(WorkerJobsTable, WorkerJobHistoryTable)
 }
 
 val worker = Worker(id = "api-1") {
-    jobs(store) {
+    jobs(queue, history) {
         job<EmailConfig> { context, config -> send(config) }
     }
 }
 worker.start(scope)
 ```
 
-`ExposedJobStore` uses the supplied `Database` and never creates, owns, or closes connections. The
-schema is user-managed; `WorkerJobsTable` is the source of truth, and `store.createSchema()` is an
-optional convenience for applications without a migration system.
+`ExposedJobQueue` and `ExposedJobHistory` use the supplied `Database` and never create, own, or close
+connections. The schema is user-managed; `WorkerJobsTable` and `WorkerJobHistoryTable` are the source
+of truth, and `createSchema()` on either store is an optional convenience for applications without a
+migration system.
 
-The module is JDBC-only. The store encodes handler configs and job metadata with the supplied
+The module is JDBC-only. The queue encodes handler configs and job metadata with the supplied
 `StringFormat`, and uses Exposed's `timestamp()` columns for `kotlin.time.Instant`.
 
 On PostgreSQL, MySQL 8+/MariaDB 10.6+, and Oracle, claim candidates are selected with

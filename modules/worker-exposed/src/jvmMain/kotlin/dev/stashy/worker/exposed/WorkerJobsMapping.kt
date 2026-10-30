@@ -20,7 +20,7 @@ internal fun ResultRow.toJob(format: StringFormat): Job {
             expiresAt = this[WorkerJobsTable.leaseExpiresAt] ?: error("Running job is missing its lease expiry"),
         )
     } else null
-    
+
     return Job(
         definition = Job.Definition(
             id = Job.Id(this[WorkerJobsTable.id]),
@@ -35,9 +35,6 @@ internal fun ResultRow.toJob(format: StringFormat): Job {
         nextRun = this[WorkerJobsTable.nextRunAt],
         attempt = this[WorkerJobsTable.attempt],
         lock = lock,
-        lastStartedAt = this[WorkerJobsTable.lastStartedAt],
-        lastFinishedAt = this[WorkerJobsTable.lastFinishedAt],
-        lastError = this[WorkerJobsTable.lastError],
     )
 }
 
@@ -66,20 +63,17 @@ internal fun UpdateBuilder<*>.setDefinitionReset(
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     this[WorkerJobsTable.attempt] = 0
     clearLock()
-    this[WorkerJobsTable.lastError] = null
 }
 
 internal fun UpdateBuilder<*>.setClaim(
     workerId: String,
     token: String,
     leaseUntil: Instant,
-    startedAt: Instant,
 ) {
     this[WorkerJobsTable.status] = Job.Status.RUNNING.name
     this[WorkerJobsTable.lockedBy] = workerId
     this[WorkerJobsTable.lockToken] = token
     this[WorkerJobsTable.leaseExpiresAt] = leaseUntil
-    this[WorkerJobsTable.lastStartedAt] = startedAt
     this[WorkerJobsTable.attempt] = WorkerJobsTable.attempt + 1
 }
 
@@ -87,42 +81,18 @@ internal fun UpdateBuilder<*>.setLease(leaseUntil: Instant) {
     this[WorkerJobsTable.leaseExpiresAt] = leaseUntil
 }
 
-internal fun UpdateBuilder<*>.setCompletion(
-    nextRunAt: Instant?,
-    finishedAt: Instant,
-    error: String?,
-) {
-    this[WorkerJobsTable.status] = if (nextRunAt == null) {
-        Job.Status.COMPLETED.name
-    } else {
-        Job.Status.PENDING.name
-    }
-    if (nextRunAt != null) this[WorkerJobsTable.scheduledAt] = nextRunAt
+internal fun UpdateBuilder<*>.setCompletion(nextRunAt: Instant) {
+    this[WorkerJobsTable.status] = Job.Status.PENDING.name
+    this[WorkerJobsTable.scheduledAt] = nextRunAt
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     this[WorkerJobsTable.attempt] = 0
     clearLock()
-    this[WorkerJobsTable.lastFinishedAt] = finishedAt
-    this[WorkerJobsTable.lastError] = error
 }
 
-internal fun UpdateBuilder<*>.setReschedule(
-    nextRunAt: Instant,
-    finishedAt: Instant,
-    error: String?,
-) {
+internal fun UpdateBuilder<*>.setReschedule(nextRunAt: Instant) {
     this[WorkerJobsTable.status] = Job.Status.PENDING.name
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     clearLock()
-    this[WorkerJobsTable.lastFinishedAt] = finishedAt
-    this[WorkerJobsTable.lastError] = error
-}
-
-internal fun UpdateBuilder<*>.setFailure(finishedAt: Instant, error: String?) {
-    this[WorkerJobsTable.status] = Job.Status.FAILED.name
-    this[WorkerJobsTable.nextRunAt] = null
-    clearLock()
-    this[WorkerJobsTable.lastFinishedAt] = finishedAt
-    this[WorkerJobsTable.lastError] = error
 }
 
 private fun UpdateBuilder<*>.clearLock() {

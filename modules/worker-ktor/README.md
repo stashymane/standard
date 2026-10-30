@@ -7,7 +7,7 @@ Binds a `Worker` to the Ktor application lifecycle.
 ```kotlin
 install(Workers) {
     id = "api-1"
-    jobs(InMemoryJobStore(Json { ignoreUnknownKeys = true; encodeDefaults = true })) {
+    jobs(InMemoryJobQueue(Json { ignoreUnknownKeys = true; encodeDefaults = true })) {
         job<EmailConfig> { context, config -> send(config) }
     }
     config {
@@ -22,5 +22,5 @@ application.launch {
 }
 ```
 
-Each `jobs` block binds a store to the handlers it may execute. The plugin exposes the running
-instance through `application.workers`.
+Each `jobs` block binds a queue to the handlers it may execute and optionally records their history.
+The plugin exposes the running instance through `application.workers`.

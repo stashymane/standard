@@ -9,23 +9,25 @@ import kotlin.uuid.Uuid
 /**
  * Configuration for the Ktor [Workers] plugin.
  *
- * A [store] is required. Use [dev.stashy.worker.job.InMemoryJobStore] for a single-node
- * application or provide a database-backed implementation for multi-server deployments.
+ * Jobs are registered with [jobs], which binds a handler set to a [JobStore]. Use a database-backed
+ * store for work shared across the cluster and an in-memory store for node-local jobs.
  *
  * Jobs are scheduled through [Worker.schedule] and [Worker.enqueue] after the plugin is installed.
  */
 public class WorkersConfig {
     public var id: String = Uuid.generateV7().toString()
-    public var store: JobStore? = null
 
-    private val jobBlocks = mutableListOf<JobsRegistry.() -> Unit>()
+    private val jobBlocks = mutableListOf<Pair<JobStore, JobsRegistry.() -> Unit>>()
     private val configBlocks = mutableListOf<WorkerConfig.() -> Unit>()
 
     /**
-     * Registers jobs by the serial name of their config type.
+     * Registers jobs that run against [store].
      */
-    public fun jobs(configure: JobsRegistry.() -> Unit): Unit {
-        jobBlocks += configure
+    public fun jobs(store: JobStore, configure: JobsRegistry.() -> Unit): Unit {
+        require(jobBlocks.none { it.first === store }) {
+            "Jobs for this JobStore are already registered"
+        }
+        jobBlocks += store to configure
     }
 
     /**
@@ -35,17 +37,12 @@ public class WorkersConfig {
         configBlocks += configure
     }
 
-    internal fun createWorker(): Worker {
-        val store = requireNotNull(store) {
-            "The Workers plugin requires a JobStore; set store in the install block"
+    internal fun createWorker(): Worker = Worker(id = id) {
+        jobBlocks.forEach { (store, block) ->
+            jobs(store) { block(this) }
         }
-        return Worker(id = id, store = store) {
-            jobs {
-                jobBlocks.forEach { block -> block(this) }
-            }
-            config {
-                configBlocks.forEach { block -> block(this) }
-            }
+        config {
+            configBlocks.forEach { block -> block(this) }
         }
     }
 }

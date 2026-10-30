@@ -7,8 +7,8 @@ Composable, schedulable workers.
 ```kotlin
 val store = InMemoryJobStore(Json { ignoreUnknownKeys = true })
 
-val worker = Worker(id = "api-1", store = store) {
-    jobs {
+val worker = Worker(id = "api-1") {
+    jobs(store) {
         job<EmailConfig> { context, config ->
             // context.runKey is stable across retries of this occurrence.
             send(config.email, config.content)
@@ -44,6 +44,26 @@ worker.enqueue(EmailConfig(...), at = when)  // exact instant
 
 Jobs are selected by the serial name of their config type. Add `@SerialName` to the config class to
 keep that name stable when the class is moved or renamed.
+
+## Stores
+
+Each `jobs(store) { ... }` block binds a `JobStore` to the handlers it may execute. A worker can use
+several stores, and `maxConcurrentJobs` applies to each store independently. Use an
+`InMemoryJobStore` for node-local jobs:
+
+```kotlin
+val worker = Worker(id = "api-1") {
+    jobs(sharedStore) {
+        job<SendEmail> { context, config -> send(config) }
+    }
+    jobs(InMemoryJobStore(Json)) {
+        job<PruneCache> { context, config -> cache.evictAll() }
+    }
+}
+```
+
+A handler may only be registered once across all stores, and the same store may only be passed to
+one `jobs` block.
 
 ## Preparation
 
@@ -87,7 +107,7 @@ Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or r
 outside `Worker.sync`.
 
 `prepareWindow` should cover the time a prepared handler needs to finish preparation. A prepared job
-keeps its `maxConcurrentJobs` slot while waiting, so that execution can start on time.
+keeps a slot in its store's `maxConcurrentJobs` while waiting, so that execution can start on time.
 
 ## Multi-server behavior
 

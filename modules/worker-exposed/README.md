@@ -13,8 +13,8 @@ transaction(database) {
     SchemaUtils.create(WorkerJobsTable)
 }
 
-val worker = Worker(id = "api-1", store = store) {
-    jobs {
+val worker = Worker(id = "api-1") {
+    jobs(store) {
         job<EmailConfig> { context, config -> send(config) }
     }
 }

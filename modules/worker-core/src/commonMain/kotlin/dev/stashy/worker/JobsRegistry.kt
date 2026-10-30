@@ -7,7 +7,9 @@ package dev.stashy.worker
  * stable when a config class is moved or renamed.
  */
 @JobsDsl
-public class JobsRegistry internal constructor() {
+public class JobsRegistry internal constructor(
+    private val registeredIds: MutableSet<String> = mutableSetOf(),
+) {
     private val bindings = mutableMapOf<String, HandlerBinding>()
 
     /**
@@ -30,7 +32,8 @@ public class JobsRegistry internal constructor() {
 
     public fun <C : Any> register(handler: Handler<C>): Unit {
         val binding = handlerBinding(handler)
-        require(binding.id !in bindings) { "Job '${binding.id}' is already registered" }
+        require(binding.id !in registeredIds) { "Job '${binding.id}' is already registered" }
+        registeredIds += binding.id
         bindings[binding.id] = binding
     }
 

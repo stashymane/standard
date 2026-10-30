@@ -225,8 +225,8 @@ class ExposedJobStoreTest {
     fun `worker executes a job through the exposed store`() = runBlocking {
         h2Store().use { fixture ->
             val executed = CompletableDeferred<String>()
-            val worker = Worker(id = "exposed-worker", store = fixture.store) {
-                jobs {
+            val worker = Worker(id = "exposed-worker") {
+                jobs(fixture.store) {
                     job<String> { _, config -> executed.complete(config) }
                 }
                 config {

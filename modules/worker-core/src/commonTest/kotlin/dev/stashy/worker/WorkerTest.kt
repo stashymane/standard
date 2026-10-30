@@ -626,13 +626,124 @@ class WorkerTest {
         val store = InMemoryJobStore(TestJson)
 
         assertFailsWith<IllegalArgumentException> {
-            Worker(id = "worker", store = store) {
-                jobs {
+            Worker(id = "worker") {
+                jobs(store) {
                     job<Unit> { _, _ -> }
                     job<Unit> { _, _ -> }
                 }
             }
         }
+    }
+
+    @Test
+    fun `handlers run against the store they are registered with`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val shared = InMemoryJobStore(TestJson)
+        val local = InMemoryJobStore(TestJson)
+        val executed = mutableListOf<String>()
+        val worker = Worker(id = "worker") {
+            jobs(shared) {
+                job<String> { _, config -> executed += config }
+            }
+            jobs(local) {
+                job<Int> { _, config -> executed += config.toString() }
+            }
+            config {
+                pollInterval = 10.seconds
+                prepareWindow = 10.seconds
+                leaseDuration = 1.minutes
+                heartbeatInterval = 20.seconds
+                maxConcurrentJobs = 4
+                shutdownGracePeriod = 1.seconds
+                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                this.clock = clock
+                dispatcher = StandardTestDispatcher(testScheduler)
+            }
+        }
+
+        worker.enqueue("shared", at = clock.now())
+        worker.enqueue(42, at = clock.now())
+
+        assertEquals(setOf("kotlin.String"), shared.list().map { it.definition.handlerId }.toSet())
+        assertEquals(setOf("kotlin.Int"), local.list().map { it.definition.handlerId }.toSet())
+
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(setOf("shared", "42"), executed.toSet())
+        assertEquals(2, executed.size)
+        assertTrue(shared.list().all { it.status == Job.Status.COMPLETED })
+        assertTrue(local.list().all { it.status == Job.Status.COMPLETED })
+        worker.stop()
+    }
+
+    @Test
+    fun `a handler cannot be registered in two queues`() {
+        val first = InMemoryJobStore(TestJson)
+        val second = InMemoryJobStore(TestJson)
+
+        assertFailsWith<IllegalArgumentException> {
+            Worker(id = "worker") {
+                jobs(first) { job<Unit> { _, _ -> } }
+                jobs(second) { job<Unit> { _, _ -> } }
+            }
+        }
+    }
+
+    @Test
+    fun `the same store cannot be registered twice`() {
+        val store = InMemoryJobStore(TestJson)
+
+        assertFailsWith<IllegalArgumentException> {
+            Worker(id = "worker") {
+                jobs(store) { job<Unit> { _, _ -> } }
+                jobs(store) { job<Long> { _, _ -> } }
+            }
+        }
+    }
+
+    @Test
+    fun `concurrency limit applies per queue`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val first = InMemoryJobStore(TestJson)
+        val second = InMemoryJobStore(TestJson)
+        val gate = CompletableDeferred<Unit>()
+        var running = 0
+        var peak = 0
+
+        suspend fun runJob() {
+            running++
+            peak = maxOf(peak, running)
+            gate.await()
+            running--
+        }
+
+        val worker = Worker(id = "worker") {
+            jobs(first) { job<String> { _, _ -> runJob() } }
+            jobs(second) { job<Int> { _, _ -> runJob() } }
+            config {
+                pollInterval = 10.seconds
+                prepareWindow = 10.seconds
+                leaseDuration = 1.minutes
+                heartbeatInterval = 20.seconds
+                maxConcurrentJobs = 1
+                shutdownGracePeriod = 1.seconds
+                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                this.clock = clock
+                dispatcher = StandardTestDispatcher(testScheduler)
+            }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue(2, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(2, peak)
+
+        gate.complete(Unit)
+        runCurrent()
+        worker.stop()
     }
 
     private fun TestScope.worker(
@@ -644,8 +755,8 @@ class WorkerTest {
         poll: Duration = 10.seconds,
         prepareWindow: Duration = poll,
         configureHandlers: JobsRegistry.() -> Unit,
-    ): Worker = Worker(id = "worker", store = store) {
-        jobs(configureHandlers)
+    ): Worker = Worker(id = "worker") {
+        jobs(store) { configureHandlers() }
         config {
             pollInterval = poll
             this.prepareWindow = prepareWindow

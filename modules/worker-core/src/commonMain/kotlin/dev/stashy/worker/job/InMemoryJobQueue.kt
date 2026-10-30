@@ -21,15 +21,15 @@ public class InMemoryJobQueue(
     private val format: StringFormat,
 ) : JobQueue {
     private data class Entry(
-        val job: Job,
+        val job: QueuedJob,
         val storedConfig: String,
     )
 
     private val jobs = atomic<Map<Job.Id, Entry>>(emptyMap())
 
-    override suspend fun get(id: Job.Id): Job? = jobs.value[id]?.job
+    override suspend fun get(id: Job.Id): QueuedJob? = jobs.value[id]?.job
 
-    override suspend fun list(filter: JobQueue.Filter): List<Job> = jobs.value.values
+    override suspend fun list(filter: JobQueue.Filter): List<QueuedJob> = jobs.value.values
         .asSequence()
         .map(Entry::job)
         .filter { job -> filter.statuses == null || job.status in filter.statuses }
@@ -39,15 +39,15 @@ public class InMemoryJobQueue(
         .toList()
 
     override suspend fun <C : Any> create(
-        definition: Job.Definition,
+        job: Job,
         config: C,
         serializer: KSerializer<C>,
         scheduledAt: Instant,
     ): Boolean {
         val entry = Entry(
-            job = Job(
-                definition = definition,
-                status = Job.Status.PENDING,
+            job = QueuedJob(
+                definition = job,
+                status = QueuedJob.Status.PENDING,
                 scheduledAt = scheduledAt,
                 nextRun = scheduledAt,
                 attempt = 0,
@@ -56,28 +56,28 @@ public class InMemoryJobQueue(
             storedConfig = format.encodeToString(serializer, config),
         )
         val previous = jobs.getAndUpdate { current ->
-            if (current.containsKey(definition.id)) {
+            if (current.containsKey(job.id)) {
                 current
             } else {
-                current + (definition.id to entry)
+                current + (job.id to entry)
             }
         }
-        return !previous.containsKey(definition.id)
+        return !previous.containsKey(job.id)
     }
 
-    override suspend fun <C : Any> updateDefinition(
-        definition: Job.Definition,
+    override suspend fun <C : Any> update(
+        job: Job,
         config: C,
         serializer: KSerializer<C>,
         nextRunAt: Instant?,
     ): Boolean {
         val storedConfig = format.encodeToString(serializer, config)
         val previous = jobs.getAndUpdate { current ->
-            val entry = current[definition.id] ?: return@getAndUpdate current
+            val entry = current[job.id] ?: return@getAndUpdate current
             val existing = entry.job
-            val reset = if (nextRunAt != null && existing.status != Job.Status.RUNNING) {
+            val reset = if (nextRunAt != null && existing.status != QueuedJob.Status.RUNNING) {
                 existing.copy(
-                    status = Job.Status.PENDING,
+                    status = QueuedJob.Status.PENDING,
                     scheduledAt = nextRunAt,
                     nextRun = nextRunAt,
                     attempt = 0,
@@ -86,9 +86,9 @@ public class InMemoryJobQueue(
             } else {
                 existing
             }
-            current + (definition.id to Entry(reset.copy(definition = definition), storedConfig))
+            current + (job.id to Entry(reset.copy(definition = job), storedConfig))
         }
-        return previous.containsKey(definition.id)
+        return previous.containsKey(job.id)
     }
 
     override suspend fun <C : Any> readConfig(
@@ -104,14 +104,14 @@ public class InMemoryJobQueue(
     override suspend fun delete(id: Job.Id): Boolean {
         val previous = jobs.getAndUpdate { current ->
             val job = current[id]?.job
-            if (job == null || job.status == Job.Status.RUNNING) {
+            if (job == null || job.status == QueuedJob.Status.RUNNING) {
                 current
             } else {
                 current - id
             }
         }
         val job = previous[id]?.job
-        return job != null && job.status != Job.Status.RUNNING
+        return job != null && job.status != QueuedJob.Status.RUNNING
     }
 
     override suspend fun claim(request: JobQueue.ClaimRequest, limit: Int): List<JobQueue.Claimed> {
@@ -132,9 +132,9 @@ public class InMemoryJobQueue(
                     val candidate = entry.job
                     val attempt = candidate.attempt + 1
                     val claimedJob = candidate.copy(
-                        status = Job.Status.RUNNING,
+                        status = QueuedJob.Status.RUNNING,
                         attempt = attempt,
-                        lock = Job.Lock(
+                        lock = QueuedJob.Lock(
                             token = Uuid.random().toString(),
                             lockedBy = request.workerId,
                             expiresAt = request.now + request.lease,
@@ -177,7 +177,7 @@ public class InMemoryJobQueue(
                 current - claim.job.definition.id
             } else {
                 val updatedJob = entry.job.copy(
-                    status = Job.Status.PENDING,
+                    status = QueuedJob.Status.PENDING,
                     scheduledAt = nextRunAt,
                     nextRun = nextRunAt,
                     attempt = 0,
@@ -196,7 +196,7 @@ public class InMemoryJobQueue(
                 current
             } else {
                 val updatedJob = entry.job.copy(
-                    status = Job.Status.PENDING,
+                    status = QueuedJob.Status.PENDING,
                     nextRun = nextRunAt,
                     lock = null,
                 )
@@ -222,7 +222,7 @@ public class InMemoryJobQueue(
         .asSequence()
         .map(Entry::job)
         .filter { job ->
-            job.status == Job.Status.RUNNING &&
+            job.status == QueuedJob.Status.RUNNING &&
                     job.lock?.let { it.expiresAt <= now } == true
         }
         .take(limit)
@@ -237,13 +237,13 @@ public class InMemoryJobQueue(
         }
         .toList()
 
-    private fun Job.isRunnableAt(horizon: Instant, handlerIds: Set<String>): Boolean =
-        status == Job.Status.PENDING &&
+    private fun QueuedJob.isRunnableAt(horizon: Instant, handlerIds: Set<String>): Boolean =
+        status == QueuedJob.Status.PENDING &&
                 definition.enabled &&
                 definition.handlerId in handlerIds &&
                 nextRun != null &&
                 nextRun <= horizon
 
-    private fun Job.isOwnedBy(claim: JobQueue.Claimed): Boolean =
-        status == Job.Status.RUNNING && lock?.token == claim.lockToken
+    private fun QueuedJob.isOwnedBy(claim: JobQueue.Claimed): Boolean =
+        status == QueuedJob.Status.RUNNING && lock?.token == claim.lockToken
 }

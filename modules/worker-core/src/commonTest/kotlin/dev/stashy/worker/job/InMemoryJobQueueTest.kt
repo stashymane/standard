@@ -29,7 +29,7 @@ class InMemoryJobQueueTest {
 
         assertEquals(1, claims.count { it != null })
         assertEquals(1, queue.get(definition.id)?.attempt)
-        assertEquals(Job.Status.RUNNING, queue.get(definition.id)?.status)
+        assertEquals(QueuedJob.Status.RUNNING, queue.get(definition.id)?.status)
     }
 
     @Test
@@ -84,8 +84,8 @@ class InMemoryJobQueueTest {
         val claims = queue.claim(request(now, lease = 1.minutes), limit = 2)
 
         assertEquals(listOf("a", "b"), claims.map { it.job.definition.id.value })
-        assertTrue(claims.all { it.job.status == Job.Status.RUNNING })
-        assertEquals(Job.Status.PENDING, queue.get(Job.Id("c"))?.status)
+        assertTrue(claims.all { it.job.status == QueuedJob.Status.RUNNING })
+        assertEquals(QueuedJob.Status.PENDING, queue.get(Job.Id("c"))?.status)
     }
 
     @Test
@@ -102,7 +102,7 @@ class InMemoryJobQueueTest {
         )
         assertEquals(
             listOf("one"),
-            queue.list(JobQueue.Filter(statuses = setOf(Job.Status.RUNNING))).map { it.definition.id.value },
+            queue.list(JobQueue.Filter(statuses = setOf(QueuedJob.Status.RUNNING))).map { it.definition.id.value },
         )
         assertEquals(
             listOf("other"),
@@ -138,7 +138,7 @@ class InMemoryJobQueueTest {
         assertTrue(queue.complete(claim, next))
 
         val job = assertNotNull(queue.get(definition.id))
-        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(QueuedJob.Status.PENDING, job.status)
         assertEquals(0, job.attempt)
         assertEquals(next, job.nextRun)
         assertEquals(next, job.scheduledAt)
@@ -153,10 +153,10 @@ class InMemoryJobQueueTest {
         assertTrue(queue.reschedule(claim, now + 1.minutes))
 
         val changed = definition.copy(schedule = Schedule.Cron("0 0 3 ? * * *", "UTC"))
-        assertTrue(queue.updateDefinition(changed, Unit, serializer(), now + 1.minutes))
+        assertTrue(queue.update(changed, Unit, serializer(), now + 1.minutes))
 
         val job = assertNotNull(queue.get(definition.id))
-        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(QueuedJob.Status.PENDING, job.status)
         assertEquals(0, job.attempt)
         assertEquals(now + 1.minutes, job.nextRun)
     }
@@ -203,7 +203,7 @@ class InMemoryJobQueueTest {
         val definition = definition("config-update")
         queue.create(definition, "before", serializer(), now)
 
-        assertTrue(queue.updateDefinition(definition, "after", serializer()))
+        assertTrue(queue.update(definition, "after", serializer()))
         val claim = assertNotNull(queue.claim(request(now, lease = 1.minutes)))
 
         assertEquals("after", queue.readConfig(claim, serializer()))
@@ -217,7 +217,7 @@ class InMemoryJobQueueTest {
         val claim = assertNotNull(queue.claim(request(now, lease = 1.minutes)))
         assertTrue(queue.complete(claim, null))
 
-        assertFalse(queue.updateDefinition(definition, Unit, serializer()))
+        assertFalse(queue.update(definition, Unit, serializer()))
     }
 
     @Test
@@ -235,7 +235,7 @@ class InMemoryJobQueueTest {
     private fun definition(
         id: String,
         schedule: Schedule = Schedule.Once(now),
-    ): Job.Definition = Job.Definition(
+    ): Job = Job(
         id = Job.Id(id),
         handlerId = "worker",
         schedule = schedule,

@@ -4,6 +4,7 @@ import dev.stashy.worker.Worker
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.LateExecutionPolicy
+import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.schedule.Schedule
 import kotlinx.coroutines.CompletableDeferred
@@ -48,7 +49,7 @@ class ExposedJobQueueTest {
             assertFalse(fixture.queue.create(definition, "other", serializer(), now))
             val job = assertNotNull(fixture.queue.get(definition.id))
             assertEquals(definition, job.definition)
-            assertEquals(Job.Status.PENDING, job.status)
+            assertEquals(QueuedJob.Status.PENDING, job.status)
             assertEquals(now, job.scheduledAt)
             assertEquals(now, job.nextRun)
             assertEquals(0, job.attempt)
@@ -86,8 +87,8 @@ class ExposedJobQueueTest {
             val claims = fixture.queue.claim(request(now), limit = 2)
 
             assertEquals(listOf("first", "second"), claims.map { it.job.definition.id.value })
-            assertTrue(claims.all { it.job.status == Job.Status.RUNNING && it.attempt == 1 })
-            assertEquals(Job.Status.PENDING, fixture.queue.get(later.id)?.status)
+            assertTrue(claims.all { it.job.status == QueuedJob.Status.RUNNING && it.attempt == 1 })
+            assertEquals(QueuedJob.Status.PENDING, fixture.queue.get(later.id)?.status)
         }
     }
 
@@ -115,7 +116,7 @@ class ExposedJobQueueTest {
             )
             assertEquals(
                 listOf("one"),
-                fixture.queue.list(JobQueue.Filter(statuses = setOf(Job.Status.RUNNING))).map { it.definition.id.value },
+                fixture.queue.list(JobQueue.Filter(statuses = setOf(QueuedJob.Status.RUNNING))).map { it.definition.id.value },
             )
             assertEquals(
                 listOf("other"),
@@ -139,7 +140,7 @@ class ExposedJobQueueTest {
 
             assertEquals(1, claims.count { it != null })
             val job = assertNotNull(fixture.queue.get(definition.id))
-            assertEquals(Job.Status.RUNNING, job.status)
+            assertEquals(QueuedJob.Status.RUNNING, job.status)
             assertEquals(1, job.attempt)
         }
     }
@@ -183,25 +184,25 @@ class ExposedJobQueueTest {
     }
 
     @Test
-    fun `updateDefinition preserves runtime state and resets a changed schedule`() = runTest {
+    fun `update preserves runtime state and resets a changed schedule`() = runTest {
         h2Queue().use { fixture ->
             val definition = definition("update")
             assertTrue(fixture.queue.create(definition, "before", serializer(), now))
             val claim = assertNotNull(fixture.queue.claim(request(now, lease = 1.minutes)))
             assertTrue(fixture.queue.reschedule(claim, now + 10.seconds))
 
-            assertTrue(fixture.queue.updateDefinition(definition, "after", serializer()))
+            assertTrue(fixture.queue.update(definition, "after", serializer()))
             val preserved = assertNotNull(fixture.queue.get(definition.id))
-            assertEquals(Job.Status.PENDING, preserved.status)
+            assertEquals(QueuedJob.Status.PENDING, preserved.status)
             assertEquals(1, preserved.attempt)
             assertEquals(now + 10.seconds, preserved.nextRun)
             assertEquals("after", fixture.queue.readConfig(claim, serializer()))
 
             val changed = definition.copy(schedule = Schedule.FixedRate(1.minutes))
             val nextRunAt = now + 1.minutes
-            assertTrue(fixture.queue.updateDefinition(changed, "changed", serializer(), nextRunAt))
+            assertTrue(fixture.queue.update(changed, "changed", serializer(), nextRunAt))
             val updated = assertNotNull(fixture.queue.get(definition.id))
-            assertEquals(Job.Status.PENDING, updated.status)
+            assertEquals(QueuedJob.Status.PENDING, updated.status)
             assertEquals(0, updated.attempt)
             assertEquals(nextRunAt, updated.nextRun)
         }
@@ -283,7 +284,7 @@ class ExposedJobQueueTest {
         schedule: Schedule = Schedule.Once(now),
         retry: RetryPolicy = RetryPolicy(),
         latePolicy: LateExecutionPolicy = LateExecutionPolicy.Run,
-    ): Job.Definition = Job.Definition(
+    ): Job = Job(
         id = Job.Id(id),
         handlerId = handlerId,
         schedule = schedule,

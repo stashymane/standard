@@ -2,6 +2,7 @@ package dev.stashy.worker.exposed
 
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobQueue
+import dev.stashy.worker.job.QueuedJob
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,14 +48,14 @@ public class ExposedJobQueue(
         SchemaUtils.create(WorkerJobsTable)
     }
 
-    override suspend fun get(id: Job.Id): Job? = transaction {
+    override suspend fun get(id: Job.Id): QueuedJob? = transaction {
         WorkerJobsTable.selectAll()
             .where { WorkerJobsTable.id eq id.value }
             .singleOrNull()
             ?.toJob(format)
     }
 
-    override suspend fun list(filter: JobQueue.Filter): List<Job> = transaction {
+    override suspend fun list(filter: JobQueue.Filter): List<QueuedJob> = transaction {
         val statuses = filter.statuses
         val handlerId = filter.handlerId
         WorkerJobsTable.selectAll()
@@ -74,7 +75,7 @@ public class ExposedJobQueue(
     }
 
     override suspend fun <C : Any> create(
-        definition: Job.Definition,
+        job: Job,
         config: C,
         serializer: KSerializer<C>,
         scheduledAt: Instant,
@@ -82,11 +83,11 @@ public class ExposedJobQueue(
         val payload = format.encodeToString(serializer, config)
         return try {
             transaction {
-                if (exists(definition.id)) return@transaction false
+                if (exists(job.id)) return@transaction false
                 WorkerJobsTable.insert {
-                    it[WorkerJobsTable.id] = definition.id.value
-                    it.setDefinition(definition, payload, format)
-                    it[WorkerJobsTable.status] = Job.Status.PENDING
+                    it[WorkerJobsTable.id] = job.id.value
+                    it.setJob(job, payload, format)
+                    it[WorkerJobsTable.status] = QueuedJob.Status.PENDING
                     it[WorkerJobsTable.scheduledAt] = scheduledAt
                     it[WorkerJobsTable.nextRunAt] = scheduledAt
                     it[WorkerJobsTable.attempt] = 0
@@ -97,12 +98,12 @@ public class ExposedJobQueue(
                 true
             }
         } catch (error: ExposedSQLException) {
-            if (transaction { exists(definition.id) }) false else throw error
+            if (transaction { exists(job.id) }) false else throw error
         }
     }
 
-    override suspend fun <C : Any> updateDefinition(
-        definition: Job.Definition,
+    override suspend fun <C : Any> update(
+        job: Job,
         config: C,
         serializer: KSerializer<C>,
         nextRunAt: Instant?,
@@ -111,16 +112,16 @@ public class ExposedJobQueue(
         return transaction {
             if (nextRunAt != null) {
                 val reset = WorkerJobsTable.update({
-                    (WorkerJobsTable.id eq definition.id.value) and
-                            (WorkerJobsTable.status neq Job.Status.RUNNING)
+                    (WorkerJobsTable.id eq job.id.value) and
+                            (WorkerJobsTable.status neq QueuedJob.Status.RUNNING)
                 }) {
-                    it.setDefinitionReset(definition, payload, nextRunAt, format)
+                    it.setJobReset(job, payload, nextRunAt, format)
                 }
                 if (reset > 0) return@transaction true
             }
 
-            WorkerJobsTable.update({ WorkerJobsTable.id eq definition.id.value }) {
-                it.setDefinition(definition, payload, format)
+            WorkerJobsTable.update({ WorkerJobsTable.id eq job.id.value }) {
+                it.setJob(job, payload, format)
             } > 0
         }
     }
@@ -139,7 +140,7 @@ public class ExposedJobQueue(
 
     override suspend fun delete(id: Job.Id): Boolean = transaction {
         WorkerJobsTable.deleteWhere {
-            (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status neq Job.Status.RUNNING)
+            (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status neq QueuedJob.Status.RUNNING)
         } > 0
     }
 
@@ -148,7 +149,7 @@ public class ExposedJobQueue(
         val horizon = request.now + request.prepareWindow
         val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
             .where {
-                (WorkerJobsTable.status eq Job.Status.PENDING) and
+                (WorkerJobsTable.status eq QueuedJob.Status.PENDING) and
                         (WorkerJobsTable.enabled eq true) and
                         (WorkerJobsTable.handlerId inList request.supportedHandlerIds) and
                         (WorkerJobsTable.nextRunAt lessEq horizon)
@@ -163,7 +164,7 @@ public class ExposedJobQueue(
             val leaseUntil = request.now + request.lease
 
             val updated = WorkerJobsTable.update({
-                (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq Job.Status.PENDING)
+                (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq QueuedJob.Status.PENDING)
             }) {
                 it.setClaim(request.workerId, token, leaseUntil)
             }
@@ -211,7 +212,7 @@ public class ExposedJobQueue(
     override suspend fun expired(now: Instant, limit: Int): List<JobQueue.Claimed> = transaction {
         WorkerJobsTable.selectAll()
             .where {
-                (WorkerJobsTable.status eq Job.Status.RUNNING) and
+                (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
                         (WorkerJobsTable.leaseExpiresAt lessEq now)
             }
             .orderBy(WorkerJobsTable.leaseExpiresAt to SortOrder.ASC)
@@ -229,13 +230,13 @@ public class ExposedJobQueue(
 
     private fun ownedBy(claim: JobQueue.Claimed): Op<Boolean> =
         (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                (WorkerJobsTable.status eq Job.Status.RUNNING) and
+                (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
                 (WorkerJobsTable.lockToken eq claim.lockToken)
 
     private fun JdbcTransaction.deleteOwned(claim: JobQueue.Claimed): Boolean =
         WorkerJobsTable.deleteWhere {
             (WorkerJobsTable.id eq claim.job.definition.id.value) and
-                    (WorkerJobsTable.status eq Job.Status.RUNNING) and
+                    (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
                     (WorkerJobsTable.lockToken eq claim.lockToken)
         } > 0
 

@@ -9,11 +9,12 @@ import kotlin.time.Instant
  *
  * Implementations used by more than one worker must make [claim] atomic. The contract is:
  *
- * - [claim] selects up to `limit` [Job.Status.PENDING] jobs whose handler id is in
+ * - [claim] selects up to `limit` [QueuedJob.Status.PENDING] jobs whose handler id is in
  *   [ClaimRequest.supportedHandlerIds] and whose next run is within the prepare window, earliest
  *   due first.
- * - It atomically marks each job [Job.Status.RUNNING] with a fresh [Job.Lock], increments the
- *   attempt counter, and sets the lease expiry, skipping jobs claimed concurrently by others.
+ * - It atomically marks each job [QueuedJob.Status.RUNNING] with a fresh [QueuedJob.Lock],
+ *   increments the attempt counter, and sets the lease expiry, skipping jobs claimed concurrently
+ *   by others.
  * - [renew], [complete], [reschedule], and [fail] must only modify a job while the supplied token
  *   still owns the lease, and return false otherwise.
  * - [expired] returns recently expired leases without claiming them. Callers transition those jobs
@@ -22,7 +23,7 @@ import kotlin.time.Instant
  * Terminal occurrences leave the queue: [complete] without a next run and [fail] remove the job.
  * Execution history is recorded separately through [JobHistory].
  *
- * Encoding and decoding handler configs is a queue concern. [create] and [updateDefinition] accept
+ * Encoding and decoding handler configs is a queue concern. [create] and [update] accept
  * a typed config with its serializer, and [readConfig] returns the decoded value for a claimed job.
  */
 public interface JobQueue {
@@ -41,7 +42,7 @@ public interface JobQueue {
      * An owned lease on a job.
      */
     public data class Claimed(
-        public val job: Job,
+        public val job: QueuedJob,
         public val attempt: Int,
         public val scheduledAt: Instant,
         /**
@@ -54,7 +55,7 @@ public interface JobQueue {
         }
 
         /**
-         * Token of the job's current [Job.Lock].
+         * Token of the job's current [QueuedJob.Lock].
          */
         public val lockToken: String
             get() = job.lock!!.token
@@ -64,7 +65,7 @@ public interface JobQueue {
      * Criteria for listing jobs. Null fields match everything.
      */
     public data class Filter(
-        public val statuses: Set<Job.Status>? = null,
+        public val statuses: Set<QueuedJob.Status>? = null,
         public val handlerId: String? = null,
         public val limit: Int = Int.MAX_VALUE,
     ) {
@@ -75,12 +76,12 @@ public interface JobQueue {
         }
     }
 
-    public suspend fun get(id: Job.Id): Job?
+    public suspend fun get(id: Job.Id): QueuedJob?
 
     /**
      * Lists jobs matching [filter], ordered by job id, at most [Filter.limit] entries.
      */
-    public suspend fun list(filter: Filter = Filter()): List<Job>
+    public suspend fun list(filter: Filter = Filter()): List<QueuedJob>
 
     /**
      * Creates a pending job at [scheduledAt]. Returns false when the id already exists.
@@ -88,21 +89,21 @@ public interface JobQueue {
      * The queue persists [config] using [serializer] and its own format.
      */
     public suspend fun <C : Any> create(
-        definition: Job.Definition,
+        job: Job,
         config: C,
         serializer: KSerializer<C>,
         scheduledAt: Instant,
     ): Boolean
 
     /**
-     * Replaces the definition and stored config while preserving runtime state.
+     * Replaces [job] and the stored config while preserving runtime state.
      *
      * When [nextRunAt] is non-null and the job is not currently running, the job is reset to
-     * [Job.Status.PENDING] at that instant with its attempt counter cleared. This is used when a
-     * definition's schedule changes.
+     * [QueuedJob.Status.PENDING] at that instant with its attempt counter cleared. This is used
+     * when a job's schedule changes.
      */
-    public suspend fun <C : Any> updateDefinition(
-        definition: Job.Definition,
+    public suspend fun <C : Any> update(
+        job: Job,
         config: C,
         serializer: KSerializer<C>,
         nextRunAt: Instant? = null,

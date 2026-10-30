@@ -88,14 +88,14 @@ public class Worker internal constructor(
     }
 
     /**
-     * Creates [definition] when missing, or updates it when its definition changed.
+     * Creates [job] when missing, or updates it when it changed.
      *
      * Runtime state is preserved. A changed schedule resets the next occurrence and attempt count.
      */
     public suspend inline fun <reified C : Any> sync(
-        definition: Job.Definition,
+        job: Job,
         jobConfig: C,
-    ): Job.Id = sync(definition, jobConfig, serializer())
+    ): Job.Id = sync(job, jobConfig, serializer())
 
     /**
      * Schedules a one-shot execution of [jobConfig].
@@ -123,48 +123,48 @@ public class Worker internal constructor(
         val handlerId = serializer.descriptor.serialName
         val queue = queueFor(handlerId)
         val startAt = at ?: config.clock.now()
-        val definition = Job.Definition(
+        val job = Job(
             id = Job.Id.random(),
             handlerId = handlerId,
             schedule = Schedule.Once(startAt),
             retry = config.retry,
         )
-        if (!queue.store.create(definition, jobConfig, serializer, startAt)) {
-            error("Could not enqueue job '${definition.id.value}'")
+        if (!queue.store.create(job, jobConfig, serializer, startAt)) {
+            error("Could not enqueue job '${job.id.value}'")
         }
-        return definition.id
+        return job.id
     }
 
     @PublishedApi
     internal suspend fun <C : Any> sync(
-        definition: Job.Definition,
+        job: Job,
         jobConfig: C,
         serializer: KSerializer<C>,
     ): Job.Id {
-        require(serializer.descriptor.serialName == definition.handlerId) {
-            "Job '${definition.id.value}' targets handler '${definition.handlerId}' " +
+        require(serializer.descriptor.serialName == job.handlerId) {
+            "Job '${job.id.value}' targets handler '${job.handlerId}' " +
                     "but its config serializer is '${serializer.descriptor.serialName}'"
         }
-        val queue = queueFor(definition.handlerId)
+        val queue = queueFor(job.handlerId)
 
         val now = config.clock.now()
-        val existing = queue.store.get(definition.id)
+        val existing = queue.store.get(job.id)
         if (existing == null) {
-            if (!queue.store.create(definition, jobConfig, serializer, definition.schedule.firstOccurrence(now))) {
+            if (!queue.store.create(job, jobConfig, serializer, job.schedule.firstOccurrence(now))) {
                 config.logger.log(
                     WorkerLogger.Level.WARN,
-                    "Job '${definition.id.value}' already exists while syncing",
+                    "Job '${job.id.value}' already exists while syncing",
                 )
             }
-            return definition.id
+            return job.id
         }
 
-        val scheduleChanged = existing.definition.schedule != definition.schedule
-        val nextRunAt = if (scheduleChanged) definition.schedule.firstOccurrence(now) else null
-        if (!queue.store.updateDefinition(definition, jobConfig, serializer, nextRunAt)) {
-            config.logger.log(WorkerLogger.Level.WARN, "Could not update synced job '${definition.id.value}'")
+        val scheduleChanged = existing.definition.schedule != job.schedule
+        val nextRunAt = if (scheduleChanged) job.schedule.firstOccurrence(now) else null
+        if (!queue.store.update(job, jobConfig, serializer, nextRunAt)) {
+            config.logger.log(WorkerLogger.Level.WARN, "Could not update synced job '${job.id.value}'")
         }
-        return definition.id
+        return job.id
     }
 
     @PublishedApi
@@ -175,8 +175,8 @@ public class Worker internal constructor(
         configure: JobBuilder.() -> Unit,
     ): Job.Id {
         val handlerId = serializer.descriptor.serialName
-        val definition = defineJob(handlerId, id, config.retry, configure)
-        return sync(definition, jobConfig, serializer)
+        val job = defineJob(handlerId, id, config.retry, configure)
+        return sync(job, jobConfig, serializer)
     }
 
     private fun queueFor(handlerId: String): Queue =

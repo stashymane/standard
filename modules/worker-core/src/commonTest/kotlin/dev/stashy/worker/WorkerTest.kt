@@ -6,6 +6,7 @@ import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobHistory
 import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.LateExecutionPolicy
+import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.schedule.Schedule
 import kotlinx.coroutines.CompletableDeferred
@@ -202,7 +203,7 @@ class WorkerTest {
         worker.stop()
 
         assertTrue(disposed)
-        assertEquals(Job.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
+        assertEquals(QueuedJob.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
     }
 
     @Test
@@ -297,7 +298,7 @@ class WorkerTest {
 
         runCurrent()
         assertEquals(1, attempts)
-        assertEquals(Job.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
+        assertEquals(QueuedJob.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
 
         advanceTimeBy(9.seconds)
         runCurrent()
@@ -331,7 +332,7 @@ class WorkerTest {
         worker.start(backgroundScope)
         runCurrent()
         assertEquals(1, attempts)
-        assertEquals(Job.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
+        assertEquals(QueuedJob.Status.PENDING, assertNotNull(store.get(Job.Id("job"))).status)
 
         advanceTimeBy(11.seconds)
         runCurrent()
@@ -358,7 +359,7 @@ class WorkerTest {
         assertEquals(1, runs)
 
         val job = assertNotNull(store.get(Job.Id("job")))
-        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(QueuedJob.Status.PENDING, job.status)
         assertEquals(Instant.fromEpochMilliseconds(40_000), job.nextRun)
 
         advanceTimeBy(18.seconds)
@@ -395,7 +396,7 @@ class WorkerTest {
         assertEquals(1, runs)
 
         val job = assertNotNull(store.get(Job.Id("job")))
-        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(QueuedJob.Status.PENDING, job.status)
         assertEquals(Instant.fromEpochMilliseconds(40_000), job.nextRun)
         val entry = assertNotNull(history.list().singleOrNull())
         assertEquals(JobHistory.Status.FAILED, entry.status)
@@ -423,7 +424,7 @@ class WorkerTest {
             job<Unit> { _, _ -> }
         }
 
-        val definition = Job.Definition(
+        val definition = Job(
             id = Job.Id("crashed"),
             handlerId = handlerId,
             schedule = Schedule.Once(clock.now()),
@@ -445,7 +446,7 @@ class WorkerTest {
         runCurrent()
 
         val job = assertNotNull(store.get(definition.id))
-        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(QueuedJob.Status.PENDING, job.status)
         assertEquals(1, job.attempt)
         assertEquals(Instant.fromEpochMilliseconds(8_000), job.nextRun)
         val entry = assertNotNull(history.list().singleOrNull())
@@ -555,7 +556,7 @@ class WorkerTest {
         }
 
         store.create(
-            Job.Definition(
+            Job(
                 id = Job.Id("invalid"),
                 handlerId = serializer<String>().descriptor.serialName,
                 schedule = Schedule.Once(clock.now()),
@@ -593,7 +594,7 @@ class WorkerTest {
         worker.stop()
 
         val job = assertNotNull(store.get(Job.Id("job")))
-        assertEquals(Job.Status.PENDING, job.status)
+        assertEquals(QueuedJob.Status.PENDING, job.status)
         assertEquals(clock.now(), job.nextRun)
         worker.stop()
     }
@@ -623,7 +624,7 @@ class WorkerTest {
 
         worker.sync(definition, Unit)
         val preserved = assertNotNull(store.get(id))
-        assertEquals(Job.Status.PENDING, preserved.status)
+        assertEquals(QueuedJob.Status.PENDING, preserved.status)
         assertEquals(1, preserved.attempt)
 
         val changed = worker.schedule("job", Unit) {
@@ -631,7 +632,7 @@ class WorkerTest {
         }
         assertEquals(id, changed)
         val updated = assertNotNull(store.get(id))
-        assertEquals(Job.Status.PENDING, updated.status)
+        assertEquals(QueuedJob.Status.PENDING, updated.status)
         assertEquals(0, updated.attempt)
         assertEquals(clock.now() + 5.minutes, updated.nextRun)
     }

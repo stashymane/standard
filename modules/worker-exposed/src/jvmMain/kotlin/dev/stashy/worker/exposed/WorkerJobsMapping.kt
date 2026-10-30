@@ -2,6 +2,7 @@ package dev.stashy.worker.exposed
 
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.LateExecutionPolicy
+import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.schedule.Schedule
 import kotlinx.serialization.StringFormat
@@ -11,18 +12,18 @@ import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import kotlin.time.Instant
 
-internal fun ResultRow.toJob(format: StringFormat): Job {
+internal fun ResultRow.toJob(format: StringFormat): QueuedJob {
     val status = this[WorkerJobsTable.status]
-    val lock = if (status == Job.Status.RUNNING) {
-        Job.Lock(
+    val lock = if (status == QueuedJob.Status.RUNNING) {
+        QueuedJob.Lock(
             token = this[WorkerJobsTable.lockToken] ?: error("Running job is missing its lock token"),
             lockedBy = this[WorkerJobsTable.lockedBy] ?: error("Running job is missing its lock owner"),
             expiresAt = this[WorkerJobsTable.leaseExpiresAt] ?: error("Running job is missing its lease expiry"),
         )
     } else null
 
-    return Job(
-        definition = Job.Definition(
+    return QueuedJob(
+        definition = Job(
             id = Job.Id(this[WorkerJobsTable.id]),
             handlerId = this[WorkerJobsTable.handlerId],
             schedule = format.decodeSchedule(this[WorkerJobsTable.schedule]),
@@ -38,27 +39,27 @@ internal fun ResultRow.toJob(format: StringFormat): Job {
     )
 }
 
-internal fun UpdateBuilder<*>.setDefinition(
-    definition: Job.Definition,
+internal fun UpdateBuilder<*>.setJob(
+    job: Job,
     payload: String,
     format: StringFormat,
 ) {
-    this[WorkerJobsTable.handlerId] = definition.handlerId
+    this[WorkerJobsTable.handlerId] = job.handlerId
     this[WorkerJobsTable.payload] = payload
-    this[WorkerJobsTable.schedule] = format.encodeSchedule(definition.schedule)
-    this[WorkerJobsTable.enabled] = definition.enabled
-    this[WorkerJobsTable.retryPolicy] = format.encodeRetry(definition.retry)
-    this[WorkerJobsTable.latePolicy] = format.encodeLatePolicy(definition.latePolicy)
+    this[WorkerJobsTable.schedule] = format.encodeSchedule(job.schedule)
+    this[WorkerJobsTable.enabled] = job.enabled
+    this[WorkerJobsTable.retryPolicy] = format.encodeRetry(job.retry)
+    this[WorkerJobsTable.latePolicy] = format.encodeLatePolicy(job.latePolicy)
 }
 
-internal fun UpdateBuilder<*>.setDefinitionReset(
-    definition: Job.Definition,
+internal fun UpdateBuilder<*>.setJobReset(
+    job: Job,
     payload: String,
     nextRunAt: Instant,
     format: StringFormat,
 ) {
-    setDefinition(definition, payload, format)
-    this[WorkerJobsTable.status] = Job.Status.PENDING
+    setJob(job, payload, format)
+    this[WorkerJobsTable.status] = QueuedJob.Status.PENDING
     this[WorkerJobsTable.scheduledAt] = nextRunAt
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     this[WorkerJobsTable.attempt] = 0
@@ -70,7 +71,7 @@ internal fun UpdateBuilder<*>.setClaim(
     token: String,
     leaseUntil: Instant,
 ) {
-    this[WorkerJobsTable.status] = Job.Status.RUNNING
+    this[WorkerJobsTable.status] = QueuedJob.Status.RUNNING
     this[WorkerJobsTable.lockedBy] = workerId
     this[WorkerJobsTable.lockToken] = token
     this[WorkerJobsTable.leaseExpiresAt] = leaseUntil
@@ -82,7 +83,7 @@ internal fun UpdateBuilder<*>.setLease(leaseUntil: Instant) {
 }
 
 internal fun UpdateBuilder<*>.setCompletion(nextRunAt: Instant) {
-    this[WorkerJobsTable.status] = Job.Status.PENDING
+    this[WorkerJobsTable.status] = QueuedJob.Status.PENDING
     this[WorkerJobsTable.scheduledAt] = nextRunAt
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     this[WorkerJobsTable.attempt] = 0
@@ -90,7 +91,7 @@ internal fun UpdateBuilder<*>.setCompletion(nextRunAt: Instant) {
 }
 
 internal fun UpdateBuilder<*>.setReschedule(nextRunAt: Instant) {
-    this[WorkerJobsTable.status] = Job.Status.PENDING
+    this[WorkerJobsTable.status] = QueuedJob.Status.PENDING
     this[WorkerJobsTable.nextRunAt] = nextRunAt
     clearLock()
 }

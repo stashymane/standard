@@ -7,7 +7,7 @@ import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
- * Builds a [Job.Definition] for a registered handler.
+ * Builds a [Job] for a registered handler.
  */
 public class JobBuilder internal constructor(
     private val handlerId: String,
@@ -44,9 +44,9 @@ public class JobBuilder internal constructor(
         selectedSchedule = Schedule.Cron(expression, timeZone.id)
     }
 
-    internal fun build(): Job.Definition {
+    internal fun build(): Job {
         val schedule = selectedSchedule ?: error("Job '${id.value}' has no schedule")
-        return Job.Definition(
+        return Job(
             id = id,
             handlerId = handlerId,
             schedule = schedule,
@@ -58,11 +58,11 @@ public class JobBuilder internal constructor(
 }
 
 /**
- * Creates a job definition through the [JobBuilder] DSL.
+ * Creates a job through the [JobBuilder] DSL.
  */
 public fun defineJob(
     handlerId: String,
     id: Job.Id,
     defaultRetry: RetryPolicy = RetryPolicy(),
     configure: JobBuilder.() -> Unit,
-): Job.Definition = JobBuilder(handlerId, id, defaultRetry).apply(configure).build()
+): Job = JobBuilder(handlerId, id, defaultRetry).apply(configure).build()

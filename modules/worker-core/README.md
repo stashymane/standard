@@ -153,14 +153,14 @@ Database queues must implement these atomicity rules:
    should map the three lock columns together so a partial lock cannot be persisted.
 7. `complete` without a next run and `fail` remove the row; `complete` with a next run and
    `reschedule` return the row to `PENDING`.
-8. `create` and `updateDefinition` receive a typed config with its serializer; the queue encodes it
+8. `create` and `update` receive a typed config with its serializer; the queue encodes it
    with its own format. `readConfig` decodes a claimed job's config with the handler's serializer.
 
 `worker-exposed` provides Exposed-based implementations of this contract and of `JobHistory`.
 
 `payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The queue encodes
-handler configs with its own `StringFormat`; the definition itself contains no payload. A JSON
-definition looks like:
+handler configs with its own `StringFormat`; the job itself contains no payload. A JSON job looks
+like:
 
 ```json
 {

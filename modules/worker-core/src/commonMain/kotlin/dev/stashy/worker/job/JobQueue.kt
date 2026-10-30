@@ -1,6 +1,5 @@
 package dev.stashy.worker.job
 
-import kotlinx.serialization.KSerializer
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -22,11 +21,13 @@ import kotlin.time.Instant
  *
  * Terminal occurrences leave the queue: [complete] without a next run and [fail] remove the job.
  * Execution history is recorded separately through [JobHistory].
- *
- * Encoding and decoding handler configs is a queue concern. [create] and [update] accept
- * a typed config with its serializer, and [readConfig] returns the decoded value for a claimed job.
  */
-public interface JobQueue {
+public interface JobQueue<P : Any> {
+    /**
+     * Encodes and decodes the typed configs stored as [P] payloads.
+     */
+    public val codec: ConfigCodec<P>
+
     /**
      * Criteria for an atomic claim.
      */
@@ -41,8 +42,8 @@ public interface JobQueue {
     /**
      * An owned lease on a job.
      */
-    public data class Claimed(
-        public val job: QueuedJob,
+    public data class Claimed<P : Any>(
+        public val job: QueuedJob<P>,
         public val attempt: Int,
         public val scheduledAt: Instant,
         /**
@@ -76,46 +77,27 @@ public interface JobQueue {
         }
     }
 
-    public suspend fun get(id: Job.Id): QueuedJob?
+    public suspend fun get(id: Job.Id): QueuedJob<P>?
 
     /**
      * Lists jobs matching [filter], ordered by job id, at most [Filter.limit] entries.
      */
-    public suspend fun list(filter: Filter = Filter()): List<QueuedJob>
+    public suspend fun list(filter: Filter = Filter()): List<QueuedJob<P>>
 
     /**
-     * Creates a pending job at [scheduledAt]. Returns false when the id already exists.
-     *
-     * The queue persists [config] using [serializer] and its own format.
+     * Creates a pending job at [scheduledAt] with the encoded [payload]. Returns false when the id
+     * already exists.
      */
-    public suspend fun <C : Any> create(
-        job: Job,
-        config: C,
-        serializer: KSerializer<C>,
-        scheduledAt: Instant,
-    ): Boolean
+    public suspend fun create(job: Job, payload: P, scheduledAt: Instant): Boolean
 
     /**
-     * Replaces [job] and the stored config while preserving runtime state.
+     * Replaces [job] and its stored [payload] while preserving runtime state.
      *
      * When [nextRunAt] is non-null and the job is not currently running, the job is reset to
      * [QueuedJob.Status.PENDING] at that instant with its attempt counter cleared. This is used
      * when a job's schedule changes.
      */
-    public suspend fun <C : Any> update(
-        job: Job,
-        config: C,
-        serializer: KSerializer<C>,
-        nextRunAt: Instant? = null,
-    ): Boolean
-
-    /**
-     * Decodes the config of a claimed job using [serializer].
-     */
-    public suspend fun <C : Any> readConfig(
-        claim: Claimed,
-        serializer: KSerializer<C>,
-    ): C
+    public suspend fun update(job: Job, payload: P, nextRunAt: Instant? = null): Boolean
 
     /**
      * Deletes a job that is not currently running.
@@ -125,37 +107,37 @@ public interface JobQueue {
     /**
      * Atomically claims the next runnable job.
      */
-    public suspend fun claim(request: ClaimRequest): Claimed? = claim(request, limit = 1).firstOrNull()
+    public suspend fun claim(request: ClaimRequest): Claimed<P>? = claim(request, limit = 1).firstOrNull()
 
     /**
      * Atomically claims up to [limit] runnable jobs, earliest due first. Jobs claimed concurrently
      * by another worker are skipped.
      */
-    public suspend fun claim(request: ClaimRequest, limit: Int): List<Claimed>
+    public suspend fun claim(request: ClaimRequest, limit: Int): List<Claimed<P>>
 
     /**
      * Extends the lease. Returns false if the caller no longer owns it.
      */
-    public suspend fun renew(claim: Claimed, now: Instant, lease: Duration): Boolean
+    public suspend fun renew(claim: Claimed<P>, now: Instant, lease: Duration): Boolean
 
     /**
      * Completes an occurrence and schedules [nextRunAt], or removes the job from the queue when
      * null.
      */
-    public suspend fun complete(claim: Claimed, nextRunAt: Instant?): Boolean
+    public suspend fun complete(claim: Claimed<P>, nextRunAt: Instant?): Boolean
 
     /**
      * Releases a runnable occurrence for a later attempt without resetting the attempt counter.
      */
-    public suspend fun reschedule(claim: Claimed, nextRunAt: Instant): Boolean
+    public suspend fun reschedule(claim: Claimed<P>, nextRunAt: Instant): Boolean
 
     /**
      * Marks the job as permanently failed and removes it from the queue.
      */
-    public suspend fun fail(claim: Claimed): Boolean
+    public suspend fun fail(claim: Claimed<P>): Boolean
 
     /**
      * Returns jobs whose lease expired at or before [now].
      */
-    public suspend fun expired(now: Instant, limit: Int = 64): List<Claimed>
+    public suspend fun expired(now: Instant, limit: Int = 64): List<Claimed<P>>
 }

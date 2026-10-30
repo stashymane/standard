@@ -38,14 +38,14 @@ internal sealed interface OccurrenceDecision {
         /**
          * Decision for a successful occurrence: complete it, scheduling the next one when recurring.
          */
-        fun success(claim: JobQueue.Claimed, finishedAt: Instant): OccurrenceDecision =
+        fun <P : Any> success(claim: JobQueue.Claimed<P>, finishedAt: Instant): OccurrenceDecision =
             Complete(claim.job.definition.schedule.nextOccurrence(claim.scheduledAt, finishedAt))
 
         /**
          * Decision for a failed occurrence: a retry while attempts remain, unless its instant would
          * violate the late-execution policy; the occurrence ends once attempts are exhausted.
          */
-        fun failure(claim: JobQueue.Claimed, now: Instant, error: String): OccurrenceDecision {
+        fun <P : Any> failure(claim: JobQueue.Claimed<P>, now: Instant, error: String): OccurrenceDecision {
             val definition = claim.job.definition
             if (claim.attempt >= definition.retry.maxAttempts) {
                 return terminal(claim, now, "Attempts exhausted: $error")
@@ -63,7 +63,7 @@ internal sealed interface OccurrenceDecision {
          * Ends an occurrence without further attempts: one-shot jobs fail, while recurring jobs
          * advance to their next occurrence with [error] recorded.
          */
-        fun terminal(claim: JobQueue.Claimed, now: Instant, error: String): OccurrenceDecision {
+        fun <P : Any> terminal(claim: JobQueue.Claimed<P>, now: Instant, error: String): OccurrenceDecision {
             val next = claim.job.definition.schedule.nextOccurrence(claim.scheduledAt, now)
             return if (next == null) Fail(error) else Complete(next, error)
         }

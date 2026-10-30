@@ -12,7 +12,7 @@ import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import kotlin.time.Instant
 
-internal fun ResultRow.toJob(format: StringFormat): QueuedJob {
+internal fun ResultRow.toJob(format: StringFormat): QueuedJob<String> {
     val status = this[WorkerJobsTable.status]
     val lock = if (status == QueuedJob.Status.RUNNING) {
         QueuedJob.Lock(
@@ -31,6 +31,7 @@ internal fun ResultRow.toJob(format: StringFormat): QueuedJob {
             retry = format.decodeRetry(this[WorkerJobsTable.retryPolicy]),
             latePolicy = format.decodeLatePolicy(this[WorkerJobsTable.latePolicy]),
         ),
+        payload = this[WorkerJobsTable.payload],
         status = status,
         scheduledAt = this[WorkerJobsTable.scheduledAt],
         nextRun = this[WorkerJobsTable.nextRunAt],

@@ -28,9 +28,9 @@ public class WorkersConfig {
      * A queue may only be registered once; [history] may be shared between blocks.
      */
     public fun jobs(
-        queue: JobQueue,
+        queue: JobQueue<*>,
         history: JobHistory? = null,
-        configure: JobsRegistry.() -> Unit,
+        configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
         require(jobBlocks.none { it.queue === queue }) {
             "Jobs for this JobQueue are already registered"
@@ -55,8 +55,8 @@ public class WorkersConfig {
     }
 
     private class JobBlock(
-        val queue: JobQueue,
+        val queue: JobQueue<*>,
         val history: JobHistory?,
-        val configure: JobsRegistry.() -> Unit,
+        val configure: JobsRegistry<*>.() -> Unit,
     )
 }

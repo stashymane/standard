@@ -27,7 +27,7 @@ connections. The schema is user-managed; `WorkerJobsTable` and `WorkerJobHistory
 of truth, and `createSchema()` on either store is an optional convenience for applications without a
 migration system.
 
-The module is JDBC-only. The queue encodes handler configs and job metadata with the supplied
+The module is JDBC-only. The queue stores handler payloads and job metadata with the supplied
 `StringFormat`, and uses Exposed's `timestamp()` columns for `kotlin.time.Instant`.
 
 On PostgreSQL, MySQL 8+/MariaDB 10.6+, and Oracle, claim candidates are selected with

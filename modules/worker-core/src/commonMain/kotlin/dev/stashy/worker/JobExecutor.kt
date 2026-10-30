@@ -9,15 +9,15 @@ import kotlin.time.Instant
 /**
  * Executes one claimed job and owns its lease, preparation, and occurrence decision.
  */
-internal class JobExecutor(
+internal class JobExecutor<P : Any>(
     private val workerId: String,
-    private val store: JobQueue,
+    private val store: JobQueue<P>,
     private val history: JobHistory?,
-    private val handlers: JobsRegistry,
+    private val handlers: JobsRegistry<P>,
     private val config: WorkerConfig,
 ) {
     suspend fun execute(
-        claim: JobQueue.Claimed,
+        claim: JobQueue.Claimed<P>,
         started: CompletableDeferred<Unit>,
     ): Unit {
         val definition = claim.job.definition
@@ -102,7 +102,7 @@ internal class JobExecutor(
     /**
      * Handles a lease that expired before the worker could finish the job.
      */
-    suspend fun expire(claim: JobQueue.Claimed): Unit {
+    suspend fun expire(claim: JobQueue.Claimed<P>): Unit {
         val now = config.clock.now()
         val definition = claim.job.definition
         val message = "Lease expired after ${claim.attempt} attempt(s)"
@@ -122,13 +122,13 @@ internal class JobExecutor(
     /**
      * Releases a claimed job during worker shutdown, making it runnable again immediately.
      */
-    suspend fun release(claim: JobQueue.Claimed, reason: String): Unit {
+    suspend fun release(claim: JobQueue.Claimed<P>, reason: String): Unit {
         val now = config.clock.now()
         applyDecision(claim, now, now, OccurrenceDecision.Retry(now, reason))
     }
 
     private suspend fun applyDecision(
-        claim: JobQueue.Claimed,
+        claim: JobQueue.Claimed<P>,
         startedAt: Instant,
         finishedAt: Instant,
         decision: OccurrenceDecision,
@@ -161,7 +161,7 @@ internal class JobExecutor(
     }
 
     private suspend fun recordHistory(
-        claim: JobQueue.Claimed,
+        claim: JobQueue.Claimed<P>,
         startedAt: Instant,
         finishedAt: Instant,
         decision: OccurrenceDecision,
@@ -184,7 +184,7 @@ internal class JobExecutor(
         attemptStore("Could not record history for job '${entry.jobId.value}'") { history.record(entry) }
     }
 
-    private suspend fun dispose(claim: JobQueue.Claimed, prepared: Handler.Prepared) {
+    private suspend fun dispose(claim: JobQueue.Claimed<P>, prepared: Handler.Prepared) {
         val caller = currentCoroutineContext()
         try {
             withContext(NonCancellable) {
@@ -207,7 +207,7 @@ internal class JobExecutor(
         caller.ensureActive()
     }
 
-    private suspend fun awaitScheduled(claim: JobQueue.Claimed): Unit {
+    private suspend fun awaitScheduled(claim: JobQueue.Claimed<P>): Unit {
         val executeAt = maxOf(claim.scheduledAt, claim.job.nextRun ?: claim.scheduledAt)
         while (true) {
             val remaining = executeAt - config.clock.now()
@@ -216,7 +216,7 @@ internal class JobExecutor(
         }
     }
 
-    private suspend fun heartbeat(claim: JobQueue.Claimed, onLeaseLost: () -> Unit): Unit {
+    private suspend fun heartbeat(claim: JobQueue.Claimed<P>, onLeaseLost: () -> Unit): Unit {
         val id = claim.job.definition.id
         var leaseUntil = claim.job.lock?.expiresAt ?: (config.clock.now() + config.leaseDuration)
 

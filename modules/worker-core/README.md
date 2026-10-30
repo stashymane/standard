@@ -61,7 +61,6 @@ val worker = Worker(id = "api-1") {
 
 A queue only holds pending and running jobs. Terminal occurrences leave it: completed one-shot jobs
 and failed jobs are removed, while a recurring job keeps its single pending row between occurrences.
-`InMemoryJobQueue` snapshots configs through a `StringFormat`, which suits tests and node-local jobs.
 
 Pass a `JobHistory` to record finished attempts:
 
@@ -153,13 +152,15 @@ Database queues must implement these atomicity rules:
    should map the three lock columns together so a partial lock cannot be persisted.
 7. `complete` without a next run and `fail` remove the row; `complete` with a next run and
    `reschedule` return the row to `PENDING`.
-8. `create` and `update` receive a typed config with its serializer; the queue encodes it
-   with its own format. `readConfig` decodes a claimed job's config with the handler's serializer.
+8. `create` and `update` receive the config already encoded by the queue's `ConfigCodec`;
+   `codec.decode` turns a claimed job's payload back into its config. `StringConfigCodec` wraps a
+   `StringFormat`, while `DirectConfigCodec` stores the config instance itself.
 
 `worker-exposed` provides Exposed-based implementations of this contract and of `JobHistory`.
 
-`payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The queue encodes
-handler configs with its own `StringFormat`; the job itself contains no payload. A JSON job looks
+`payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The queue stores
+payloads as produced by its `codec`; with `StringConfigCodec` the payload is the handler config
+encoded by its `StringFormat`. The job definition itself contains no payload. A JSON job looks
 like:
 
 ```json

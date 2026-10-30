@@ -839,14 +839,14 @@ class WorkerTest {
 
     private fun TestScope.worker(
         clock: Clock,
-        store: JobQueue,
+        store: JobQueue<*>,
         history: JobHistory? = null,
         retry: RetryPolicy = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
         lease: Duration = 1.minutes,
         heartbeat: Duration = 20.seconds,
         poll: Duration = 10.seconds,
         prepareWindow: Duration = poll,
-        configureHandlers: JobsRegistry.() -> Unit,
+        configureHandlers: JobsRegistry<*>.() -> Unit,
     ): Worker = Worker(id = "worker") {
         jobs(store, history) { configureHandlers() }
         config {

@@ -13,11 +13,11 @@ import kotlinx.coroutines.Job as CoroutineJob
 /**
  * A [JobQueue], its optional [JobHistory], and the handlers it may execute.
  */
-internal class Queue(
+internal class Queue<P : Any>(
     private val workerId: String,
-    val store: JobQueue,
+    val store: JobQueue<P>,
     history: JobHistory?,
-    val handlers: JobsRegistry,
+    val handlers: JobsRegistry<P>,
     private val config: WorkerConfig,
 ) {
     private val executor = JobExecutor(workerId, store, history, handlers, config)
@@ -27,10 +27,6 @@ internal class Queue(
         purgeCompleted()
         sweepExpired()
         claimRunnable(executionScope)
-    }
-
-    suspend fun release(execution: Execution, reason: String) {
-        executor.release(execution.claim, reason)
     }
 
     private fun purgeCompleted(): Unit {
@@ -83,14 +79,16 @@ internal class Queue(
             val execution = executionScope.launch(start = CoroutineStart.LAZY) {
                 executor.execute(claim, started)
             }
-            inFlight[claim.job.definition.id] = Execution(claim, execution, started)
+            inFlight[claim.job.definition.id] = Execution(execution, started) { reason ->
+                executor.release(claim, reason)
+            }
             execution.start()
         }
     }
 
     class Execution(
-        val claim: JobQueue.Claimed,
         val coroutine: CoroutineJob,
         val started: CompletableDeferred<Unit>,
+        val release: suspend (reason: String) -> Unit,
     )
 }

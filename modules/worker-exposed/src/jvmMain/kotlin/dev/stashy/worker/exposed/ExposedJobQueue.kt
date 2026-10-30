@@ -1,12 +1,13 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.job.ConfigCodec
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobQueue
 import dev.stashy.worker.job.QueuedJob
+import dev.stashy.worker.job.StringConfigCodec
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.StringFormat
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.vendors.ForUpdateOption
@@ -33,7 +34,9 @@ public class ExposedJobQueue(
     private val database: Database,
     private val format: StringFormat,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : JobQueue {
+) : JobQueue<String> {
+    override val codec: ConfigCodec<String> = StringConfigCodec(format)
+
     private val claimLockOption: ForUpdateOption? = when (database.dialect) {
         is PostgreSQLDialect -> ForUpdateOption.PostgreSQL.ForUpdate(ForUpdateOption.PostgreSQL.MODE.SKIP_LOCKED)
         is MysqlDialect -> ForUpdateOption.MySQL.ForUpdate(ForUpdateOption.MySQL.MODE.SKIP_LOCKED)
@@ -48,14 +51,14 @@ public class ExposedJobQueue(
         SchemaUtils.create(WorkerJobsTable)
     }
 
-    override suspend fun get(id: Job.Id): QueuedJob? = transaction {
+    override suspend fun get(id: Job.Id): QueuedJob<String>? = transaction {
         WorkerJobsTable.selectAll()
             .where { WorkerJobsTable.id eq id.value }
             .singleOrNull()
             ?.toJob(format)
     }
 
-    override suspend fun list(filter: JobQueue.Filter): List<QueuedJob> = transaction {
+    override suspend fun list(filter: JobQueue.Filter): List<QueuedJob<String>> = transaction {
         val statuses = filter.statuses
         val handlerId = filter.handlerId
         WorkerJobsTable.selectAll()
@@ -74,13 +77,11 @@ public class ExposedJobQueue(
             .map { it.toJob(format) }
     }
 
-    override suspend fun <C : Any> create(
+    override suspend fun create(
         job: Job,
-        config: C,
-        serializer: KSerializer<C>,
+        payload: String,
         scheduledAt: Instant,
     ): Boolean {
-        val payload = format.encodeToString(serializer, config)
         return try {
             transaction {
                 if (exists(job.id)) return@transaction false
@@ -102,13 +103,11 @@ public class ExposedJobQueue(
         }
     }
 
-    override suspend fun <C : Any> update(
+    override suspend fun update(
         job: Job,
-        config: C,
-        serializer: KSerializer<C>,
+        payload: String,
         nextRunAt: Instant?,
     ): Boolean {
-        val payload = format.encodeToString(serializer, config)
         return transaction {
             if (nextRunAt != null) {
                 val reset = WorkerJobsTable.update({
@@ -126,25 +125,13 @@ public class ExposedJobQueue(
         }
     }
 
-    override suspend fun <C : Any> readConfig(
-        claim: JobQueue.Claimed,
-        serializer: KSerializer<C>,
-    ): C = transaction {
-        val payload = WorkerJobsTable.select(WorkerJobsTable.payload)
-            .where { WorkerJobsTable.id eq claim.job.definition.id.value }
-            .singleOrNull()
-            ?.get(WorkerJobsTable.payload)
-            ?: error("Job '${claim.job.definition.id.value}' no longer exists")
-        format.decodeFromString(serializer, payload)
-    }
-
     override suspend fun delete(id: Job.Id): Boolean = transaction {
         WorkerJobsTable.deleteWhere {
             (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status neq QueuedJob.Status.RUNNING)
         } > 0
     }
 
-    override suspend fun claim(request: JobQueue.ClaimRequest, limit: Int): List<JobQueue.Claimed> = transaction {
+    override suspend fun claim(request: JobQueue.ClaimRequest, limit: Int): List<JobQueue.Claimed<String>> = transaction {
         require(limit >= 1) { "limit must be at least 1" }
         val horizon = request.now + request.prepareWindow
         val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
@@ -183,13 +170,13 @@ public class ExposedJobQueue(
         }
     }
 
-    override suspend fun renew(claim: JobQueue.Claimed, now: Instant, lease: Duration): Boolean = transaction {
+    override suspend fun renew(claim: JobQueue.Claimed<String>, now: Instant, lease: Duration): Boolean = transaction {
         WorkerJobsTable.update({ ownedBy(claim) }) {
             it.setLease(now + lease)
         } == 1
     }
 
-    override suspend fun complete(claim: JobQueue.Claimed, nextRunAt: Instant?): Boolean = transaction {
+    override suspend fun complete(claim: JobQueue.Claimed<String>, nextRunAt: Instant?): Boolean = transaction {
         if (nextRunAt == null) {
             deleteOwned(claim)
         } else {
@@ -199,17 +186,17 @@ public class ExposedJobQueue(
         }
     }
 
-    override suspend fun reschedule(claim: JobQueue.Claimed, nextRunAt: Instant): Boolean = transaction {
+    override suspend fun reschedule(claim: JobQueue.Claimed<String>, nextRunAt: Instant): Boolean = transaction {
         WorkerJobsTable.update({ ownedBy(claim) }) {
             it.setReschedule(nextRunAt)
         } == 1
     }
 
-    override suspend fun fail(claim: JobQueue.Claimed): Boolean = transaction {
+    override suspend fun fail(claim: JobQueue.Claimed<String>): Boolean = transaction {
         deleteOwned(claim)
     }
 
-    override suspend fun expired(now: Instant, limit: Int): List<JobQueue.Claimed> = transaction {
+    override suspend fun expired(now: Instant, limit: Int): List<JobQueue.Claimed<String>> = transaction {
         WorkerJobsTable.selectAll()
             .where {
                 (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
@@ -228,12 +215,12 @@ public class ExposedJobQueue(
             }
     }
 
-    private fun ownedBy(claim: JobQueue.Claimed): Op<Boolean> =
+    private fun ownedBy(claim: JobQueue.Claimed<String>): Op<Boolean> =
         (WorkerJobsTable.id eq claim.job.definition.id.value) and
                 (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
                 (WorkerJobsTable.lockToken eq claim.lockToken)
 
-    private fun JdbcTransaction.deleteOwned(claim: JobQueue.Claimed): Boolean =
+    private fun JdbcTransaction.deleteOwned(claim: JobQueue.Claimed<String>): Boolean =
         WorkerJobsTable.deleteWhere {
             (WorkerJobsTable.id eq claim.job.definition.id.value) and
                     (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and

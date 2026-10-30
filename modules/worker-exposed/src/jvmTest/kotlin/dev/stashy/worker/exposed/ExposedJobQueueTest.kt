@@ -55,7 +55,7 @@ class ExposedJobQueueTest {
             assertEquals(0, job.attempt)
 
             val claim = assertNotNull(fixture.queue.claim(request(now)))
-            assertEquals("value", fixture.queue.readConfig(claim, serializer()))
+            assertEquals("value", fixture.queue.codec.decode(claim.job.payload, serializer()))
         }
     }
 
@@ -196,7 +196,7 @@ class ExposedJobQueueTest {
             assertEquals(QueuedJob.Status.PENDING, preserved.status)
             assertEquals(1, preserved.attempt)
             assertEquals(now + 10.seconds, preserved.nextRun)
-            assertEquals("after", fixture.queue.readConfig(claim, serializer()))
+            assertEquals("after", fixture.queue.codec.decode(preserved.payload, serializer()))
 
             val changed = definition.copy(schedule = Schedule.FixedRate(1.minutes))
             val nextRunAt = now + 1.minutes
@@ -205,6 +205,7 @@ class ExposedJobQueueTest {
             assertEquals(QueuedJob.Status.PENDING, updated.status)
             assertEquals(0, updated.attempt)
             assertEquals(nextRunAt, updated.nextRun)
+            assertEquals("changed", fixture.queue.codec.decode(updated.payload, serializer()))
         }
     }
 
@@ -253,7 +254,7 @@ class ExposedJobQueueTest {
             assertTrue(fixture.queue.create(definition, "value", serializer(), now))
 
             val claim = assertNotNull(fixture.queue.claim(request(now)))
-            assertEquals("value", fixture.queue.readConfig(claim, serializer()))
+            assertEquals("value", fixture.queue.codec.decode(claim.job.payload, serializer()))
             assertTrue(fixture.queue.complete(claim, null))
             assertNull(fixture.queue.get(definition.id))
         }

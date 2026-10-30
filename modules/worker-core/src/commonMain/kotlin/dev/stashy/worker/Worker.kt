@@ -27,14 +27,14 @@ import kotlinx.coroutines.Job as CoroutineJob
 public class Worker internal constructor(
     public val id: String,
     private val config: WorkerConfig,
-    private val queues: List<Queue>,
+    private val queues: List<Queue<*>>,
 ) {
     init {
         require(id.isNotBlank()) { "Worker id must not be blank" }
         config.validate()
     }
 
-    private val queueByHandler: Map<String, Queue> = buildMap {
+    private val queueByHandler: Map<String, Queue<*>> = buildMap {
         for (queue in queues) {
             for (handlerId in queue.handlers.ids()) {
                 check(put(handlerId, queue) == null) {
@@ -129,7 +129,7 @@ public class Worker internal constructor(
             schedule = Schedule.Once(startAt),
             retry = config.retry,
         )
-        if (!queue.store.create(job, jobConfig, serializer, startAt)) {
+        if (!queue.create(job, jobConfig, serializer, startAt)) {
             error("Could not enqueue job '${job.id.value}'")
         }
         return job.id
@@ -150,7 +150,7 @@ public class Worker internal constructor(
         val now = config.clock.now()
         val existing = queue.store.get(job.id)
         if (existing == null) {
-            if (!queue.store.create(job, jobConfig, serializer, job.schedule.firstOccurrence(now))) {
+            if (!queue.create(job, jobConfig, serializer, job.schedule.firstOccurrence(now))) {
                 config.logger.log(
                     WorkerLogger.Level.WARN,
                     "Job '${job.id.value}' already exists while syncing",
@@ -161,7 +161,7 @@ public class Worker internal constructor(
 
         val scheduleChanged = existing.definition.schedule != job.schedule
         val nextRunAt = if (scheduleChanged) job.schedule.firstOccurrence(now) else null
-        if (!queue.store.update(job, jobConfig, serializer, nextRunAt)) {
+        if (!queue.update(job, jobConfig, serializer, nextRunAt)) {
             config.logger.log(WorkerLogger.Level.WARN, "Could not update synced job '${job.id.value}'")
         }
         return job.id
@@ -179,7 +179,7 @@ public class Worker internal constructor(
         return sync(job, jobConfig, serializer)
     }
 
-    private fun queueFor(handlerId: String): Queue =
+    private fun queueFor(handlerId: String): Queue<*> =
         queueByHandler[handlerId] ?: error("No job registered for '$handlerId'")
 
     private suspend fun runLoop(executionScope: CoroutineScope) {
@@ -198,40 +198,38 @@ public class Worker internal constructor(
     }
 
     private suspend fun shutdown(executionScope: CoroutineScope) {
-        val running = queues.flatMap { queue ->
-            queue.inFlight.values.map { queue to it }
-        }
+        val running = queues.flatMap { it.inFlight.values }
         if (running.isNotEmpty()) {
-            val toRelease = linkedSetOf<Pair<Queue, Queue.Execution>>()
+            val toRelease = linkedSetOf<Queue.Execution>()
 
-            val notStarted = running.filterNot { it.second.started.isCompleted }
+            val notStarted = running.filterNot { it.started.isCompleted }
             notStarted.forEach {
-                it.second.coroutine.cancel()
+                it.coroutine.cancel()
                 toRelease += it
             }
 
-            val executing = running.filter { it.second.started.isCompleted }
+            val executing = running.filter { it.started.isCompleted }
             if (executing.isNotEmpty()) {
                 config.logger.log(
                     WorkerLogger.Level.INFO,
                     "Waiting up to ${config.shutdownGracePeriod} for ${executing.size} executing worker job(s)",
                 )
                 withTimeoutOrNull(config.shutdownGracePeriod) {
-                    executing.map { it.second.coroutine }.joinAll()
+                    executing.map { it.coroutine }.joinAll()
                 }
             }
 
-            val remaining = running.filterNot { it.second.coroutine.isCompleted }
+            val remaining = running.filterNot { it.coroutine.isCompleted }
             remaining.forEach {
-                it.second.coroutine.cancel()
+                it.coroutine.cancel()
                 toRelease += it
             }
             withTimeoutOrNull(1.seconds) {
-                toRelease.map { it.second.coroutine }.joinAll()
+                toRelease.map { it.coroutine }.joinAll()
             }
 
-            for ((queue, execution) in toRelease) {
-                queue.release(execution, "Worker stopped")
+            for (execution in toRelease) {
+                execution.release("Worker stopped")
             }
         }
 
@@ -241,3 +239,17 @@ public class Worker internal constructor(
         queues.forEach { it.inFlight.clear() }
     }
 }
+
+private suspend fun <C : Any, P : Any> Queue<P>.create(
+    job: Job,
+    config: C,
+    serializer: KSerializer<C>,
+    at: Instant,
+): Boolean = store.create(job, store.codec.encode(config, serializer), at)
+
+private suspend fun <C : Any, P : Any> Queue<P>.update(
+    job: Job,
+    config: C,
+    serializer: KSerializer<C>,
+    nextRunAt: Instant?,
+): Boolean = store.update(job, store.codec.encode(config, serializer), nextRunAt)

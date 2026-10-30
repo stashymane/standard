@@ -3,22 +3,22 @@ package dev.stashy.worker
 import dev.stashy.worker.job.JobQueue
 import kotlinx.coroutines.CancellationException
 
-internal class HandlerBinding(
+internal class HandlerBinding<P : Any>(
     val id: String,
-    private val prepareExecution: suspend (JobQueue, JobQueue.Claimed, Handler.Context) -> Handler.Prepared,
+    private val prepareExecution: suspend (JobQueue<P>, JobQueue.Claimed<P>, Handler.Context) -> Handler.Prepared,
 ) {
     suspend fun prepare(
-        store: JobQueue,
-        claim: JobQueue.Claimed,
+        store: JobQueue<P>,
+        claim: JobQueue.Claimed<P>,
         context: Handler.Context,
     ): Handler.Prepared = prepareExecution(store, claim, context)
 }
 
-internal fun <C : Any> handlerBinding(handler: Handler<C>): HandlerBinding {
+internal fun <P : Any, C : Any> handlerBinding(handler: Handler<C>): HandlerBinding<P> {
     val id = handler.configSerializer.descriptor.serialName
     return HandlerBinding(id) { store, claim, context ->
         val config = try {
-            store.readConfig(claim, handler.configSerializer)
+            store.codec.decode(claim.job.payload, handler.configSerializer)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {

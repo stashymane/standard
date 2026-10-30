@@ -10,7 +10,7 @@ import dev.stashy.worker.job.JobQueue
  * execution history.
  */
 public class WorkerBuilder internal constructor() {
-    internal val bindings = mutableListOf<QueueBinding>()
+    internal val bindings = mutableListOf<QueueBinding<*>>()
     internal val config = WorkerConfig()
 
     private val handlerIds = mutableSetOf<String>()
@@ -24,16 +24,14 @@ public class WorkerBuilder internal constructor() {
      * blocks.
      */
     public fun jobs(
-        queue: JobQueue,
+        queue: JobQueue<*>,
         history: JobHistory? = null,
-        configure: JobsRegistry.() -> Unit,
+        configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
         require(bindings.none { it.queue === queue }) {
             "Jobs for this JobQueue are already registered"
         }
-        val registry = JobsRegistry(handlerIds)
-        registry.configure()
-        bindings += QueueBinding(queue, history, registry)
+        bindings += binding(queue, history, configure)
     }
 
     /**
@@ -46,12 +44,25 @@ public class WorkerBuilder internal constructor() {
     internal fun build(id: String): Worker = Worker(
         id = id,
         config = config,
-        queues = bindings.map { Queue(id, it.queue, it.history, it.handlers, config) },
+        queues = bindings.map { it.toQueue(id) },
     )
+
+    private fun <P : Any> binding(
+        queue: JobQueue<P>,
+        history: JobHistory?,
+        configure: JobsRegistry<*>.() -> Unit,
+    ): QueueBinding<P> {
+        val registry = JobsRegistry<P>(handlerIds)
+        registry.configure()
+        return QueueBinding(queue, history, registry)
+    }
+
+    private fun <P : Any> QueueBinding<P>.toQueue(workerId: String): Queue<P> =
+        Queue(workerId, queue, history, handlers, config)
 }
 
-internal class QueueBinding(
-    val queue: JobQueue,
+internal class QueueBinding<P : Any>(
+    val queue: JobQueue<P>,
     val history: JobHistory?,
-    val handlers: JobsRegistry,
+    val handlers: JobsRegistry<P>,
 )

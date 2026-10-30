@@ -1,11 +1,14 @@
 package dev.stashy.worker.job
 
 import dev.stashy.worker.TestJson
+import dev.stashy.worker.create
 import dev.stashy.worker.schedule.Schedule
+import dev.stashy.worker.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
 import kotlin.test.*
 import kotlin.time.Duration.Companion.minutes
@@ -194,7 +197,17 @@ class InMemoryJobQueueTest {
         queue.create(definition, "value", serializer(), now)
         val claim = assertNotNull(queue.claim(request(now, lease = 1.minutes)))
 
-        assertEquals("value", queue.readConfig(claim, serializer()))
+        assertEquals("value", queue.codec.decode(claim.job.payload, serializer()))
+    }
+
+    @Test
+    fun `direct codec stores the config instance itself`() = runTest {
+        val queue = InMemoryJobQueue(DirectConfigCodec)
+        val config = DirectConfig("value")
+        queue.create(definition("direct"), config, serializer(), now)
+        val claim = assertNotNull(queue.claim(request(now, lease = 1.minutes)))
+
+        assertSame(config, queue.codec.decode(claim.job.payload, serializer()))
     }
 
     @Test
@@ -206,7 +219,7 @@ class InMemoryJobQueueTest {
         assertTrue(queue.update(definition, "after", serializer()))
         val claim = assertNotNull(queue.claim(request(now, lease = 1.minutes)))
 
-        assertEquals("after", queue.readConfig(claim, serializer()))
+        assertEquals("after", queue.codec.decode(claim.job.payload, serializer()))
     }
 
     @Test
@@ -257,3 +270,6 @@ class InMemoryJobQueueTest {
         val now: Instant = Instant.parse("2026-10-27T12:00:00Z")
     }
 }
+
+@Serializable
+private data class DirectConfig(val value: String)

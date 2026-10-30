@@ -27,12 +27,13 @@ class QueuedJobTest {
         assertFailsWith<IllegalArgumentException> { QueuedJob.Lock("token", "", now) }
     }
 
-    private fun queuedJob(status: QueuedJob.Status, lock: QueuedJob.Lock? = null): QueuedJob = QueuedJob(
+    private fun queuedJob(status: QueuedJob.Status, lock: QueuedJob.Lock? = null): QueuedJob<String> = QueuedJob(
         definition = Job(
             id = Job.Id("job"),
             handlerId = "worker",
             schedule = Schedule.Once(now),
         ),
+        payload = "",
         status = status,
         scheduledAt = now,
         nextRun = now,

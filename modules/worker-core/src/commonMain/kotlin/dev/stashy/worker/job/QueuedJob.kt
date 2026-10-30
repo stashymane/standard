@@ -4,11 +4,12 @@ import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
 /**
- * A job together with its persisted runtime state in a queue.
+ * A job together with its stored payload and runtime state in a queue.
  */
 @Serializable
-public data class QueuedJob(
+public data class QueuedJob<P : Any>(
     public val definition: Job,
+    public val payload: P,
     public val status: Status,
     public val scheduledAt: Instant?,
     public val nextRun: Instant?,

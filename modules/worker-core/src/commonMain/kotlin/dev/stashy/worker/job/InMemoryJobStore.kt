@@ -1,230 +1,70 @@
 package dev.stashy.worker.job
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.StringFormat
 import kotlin.time.Duration
 import kotlin.time.Instant
-import kotlin.uuid.Uuid
 
 /**
- * In-memory [JobStore] suitable for standalone processes, tests, and single-worker applications.
+ * In-memory [JobStore] that retains completed and failed jobs for inspection and snapshots configs
+ * through [format].
+ *
+ * Suitable for tests and for simulating the full store contract in a single process. For
+ * node-local jobs in long-running processes, prefer using [LocalJobStore], which removes terminal jobs and
+ * skips serialization.
  */
 public class InMemoryJobStore(
     private val format: StringFormat,
 ) : JobStore {
-    private data class Entry(
-        val job: Job,
-        val payload: String,
-    )
+    private val engine = InMemoryJobStoreEngine(retainTerminalJobs = true)
 
-    private val mutex = Mutex()
-    private val jobs = linkedMapOf<Job.Id, Entry>()
+    override suspend fun get(id: Job.Id): Job? = engine.get(id)
 
-    override suspend fun get(id: Job.Id): Job? = mutex.withLock { jobs[id]?.job }
-
-    override suspend fun list(filter: JobStore.Filter): List<Job> = mutex.withLock {
-        jobs.values
-            .asSequence()
-            .map { it.job }
-            .filter { job -> filter.statuses == null || job.status in filter.statuses }
-            .filter { job -> filter.handlerId == null || job.definition.handlerId == filter.handlerId }
-            .sortedBy { it.definition.id.value }
-            .take(filter.limit)
-            .toList()
-    }
+    override suspend fun list(filter: JobStore.Filter): List<Job> = engine.list(filter)
 
     override suspend fun <C : Any> create(
         definition: Job.Definition,
         config: C,
         serializer: KSerializer<C>,
         scheduledAt: Instant,
-    ): Boolean = mutex.withLock {
-        if (jobs.containsKey(definition.id)) return@withLock false
-        jobs[definition.id] = Entry(
-            job = Job(
-                definition = definition,
-                status = Job.Status.PENDING,
-                scheduledAt = scheduledAt,
-                nextRun = scheduledAt,
-                attempt = 0,
-                lock = null,
-                lastStartedAt = null,
-                lastFinishedAt = null,
-                lastError = null,
-            ),
-            payload = format.encodeToString(serializer, config),
-        )
-        true
-    }
+    ): Boolean = engine.create(definition, format.encodeToString(serializer, config), scheduledAt)
 
     override suspend fun <C : Any> updateDefinition(
         definition: Job.Definition,
         config: C,
         serializer: KSerializer<C>,
         nextRunAt: Instant?,
-    ): Boolean = mutex.withLock {
-        val entry = jobs[definition.id] ?: return@withLock false
-        val existing = entry.job
-        val reset = if (nextRunAt != null && existing.status != Job.Status.RUNNING) {
-            existing.copy(
-                status = Job.Status.PENDING,
-                scheduledAt = nextRunAt,
-                nextRun = nextRunAt,
-                attempt = 0,
-                lock = null,
-                lastError = null,
-            )
-        } else {
-            existing
-        }
-        jobs[definition.id] = Entry(
-            job = reset.copy(definition = definition),
-            payload = format.encodeToString(serializer, config),
-        )
-        true
-    }
+    ): Boolean = engine.updateDefinition(definition, format.encodeToString(serializer, config), nextRunAt)
 
     override suspend fun <C : Any> readConfig(
         claim: JobStore.Claimed,
         serializer: KSerializer<C>,
-    ): C = mutex.withLock {
-        val entry = checkNotNull(jobs[claim.job.definition.id]) {
-            "Job '${claim.job.definition.id.value}' no longer exists"
-        }
-        format.decodeFromString(serializer, entry.payload)
-    }
+    ): C = format.decodeFromString(serializer, engine.readStoredConfig(claim) as String)
 
-    override suspend fun delete(id: Job.Id): Boolean = mutex.withLock {
-        if (jobs[id]?.job?.status == Job.Status.RUNNING) return@withLock false
-        jobs.remove(id) != null
-    }
+    override suspend fun delete(id: Job.Id): Boolean = engine.delete(id)
 
-    override suspend fun claim(request: JobStore.ClaimRequest, limit: Int): List<JobStore.Claimed> = mutex.withLock {
-        require(limit >= 1) { "limit must be at least 1" }
-        val horizon = request.now + request.prepareWindow
-        val runnable = jobs.values
-            .filter { it.job.isRunnableAt(horizon, request.supportedHandlerIds) }
-            .sortedBy { it.job.nextRun!! }
-            .take(limit)
+    override suspend fun claim(request: JobStore.ClaimRequest, limit: Int): List<JobStore.Claimed> =
+        engine.claim(request, limit)
 
-        runnable.map { entry ->
-            val candidate = entry.job
-            val attempt = candidate.attempt + 1
-            val claimed = candidate.copy(
-                status = Job.Status.RUNNING,
-                attempt = attempt,
-                lock = Job.Lock(
-                    token = Uuid.random().toString(),
-                    lockedBy = request.workerId,
-                    expiresAt = request.now + request.lease,
-                ),
-                lastStartedAt = request.now,
-            )
-            jobs[candidate.definition.id] = entry.copy(job = claimed)
-            JobStore.Claimed(
-                job = claimed,
-                attempt = attempt,
-                scheduledAt = candidate.scheduledAt ?: candidate.nextRun ?: request.now,
-                recovered = false,
-            )
-        }
-    }
-
-    override suspend fun renew(claim: JobStore.Claimed, now: Instant, lease: Duration): Boolean = mutex.withLock {
-        val entry = jobs[claim.job.definition.id] ?: return@withLock false
-        if (!entry.job.isOwnedBy(claim)) return@withLock false
-        val lock = entry.job.lock ?: return@withLock false
-        jobs[claim.job.definition.id] = entry.copy(job = entry.job.copy(lock = lock.copy(expiresAt = now + lease)))
-        true
-    }
+    override suspend fun renew(claim: JobStore.Claimed, now: Instant, lease: Duration): Boolean =
+        engine.renew(claim, now, lease)
 
     override suspend fun complete(
         claim: JobStore.Claimed,
         now: Instant,
         nextRunAt: Instant?,
         error: String?,
-    ): Boolean = mutex.withLock {
-        val entry = jobs[claim.job.definition.id] ?: return@withLock false
-        if (!entry.job.isOwnedBy(claim)) return@withLock false
-        jobs[claim.job.definition.id] = entry.copy(
-            job = entry.job.copy(
-                status = if (nextRunAt == null) Job.Status.COMPLETED else Job.Status.PENDING,
-                scheduledAt = nextRunAt ?: entry.job.scheduledAt,
-                nextRun = nextRunAt,
-                attempt = 0,
-                lock = null,
-                lastFinishedAt = now,
-                lastError = error,
-            ),
-        )
-        true
-    }
+    ): Boolean = engine.complete(claim, now, nextRunAt, error)
 
     override suspend fun reschedule(
         claim: JobStore.Claimed,
         now: Instant,
         nextRunAt: Instant,
         error: String?,
-    ): Boolean = mutex.withLock {
-        val entry = jobs[claim.job.definition.id] ?: return@withLock false
-        if (!entry.job.isOwnedBy(claim)) return@withLock false
-        jobs[claim.job.definition.id] = entry.copy(
-            job = entry.job.copy(
-                status = Job.Status.PENDING,
-                nextRun = nextRunAt,
-                lock = null,
-                lastFinishedAt = now,
-                lastError = error,
-            ),
-        )
-        true
-    }
+    ): Boolean = engine.reschedule(claim, now, nextRunAt, error)
 
-    override suspend fun fail(claim: JobStore.Claimed, now: Instant, error: String?): Boolean = mutex.withLock {
-        val entry = jobs[claim.job.definition.id] ?: return@withLock false
-        if (!entry.job.isOwnedBy(claim)) return@withLock false
-        jobs[claim.job.definition.id] = entry.copy(
-            job = entry.job.copy(
-                status = Job.Status.FAILED,
-                nextRun = null,
-                lock = null,
-                lastFinishedAt = now,
-                lastError = error,
-            ),
-        )
-        true
-    }
+    override suspend fun fail(claim: JobStore.Claimed, now: Instant, error: String?): Boolean =
+        engine.fail(claim, now, error)
 
-    override suspend fun expired(now: Instant, limit: Int): List<JobStore.Claimed> = mutex.withLock {
-        jobs.values
-            .asSequence()
-            .map { it.job }
-            .filter { job ->
-                job.status == Job.Status.RUNNING &&
-                        job.lock?.let { it.expiresAt <= now } == true
-            }
-            .take(limit)
-            .mapNotNull { job ->
-                if (job.lock == null) return@mapNotNull null
-                JobStore.Claimed(
-                    job = job,
-                    attempt = job.attempt,
-                    scheduledAt = job.scheduledAt ?: job.nextRun ?: now,
-                    recovered = true,
-                )
-            }
-            .toList()
-    }
-
-    private fun Job.isRunnableAt(horizon: Instant, handlerIds: Set<String>): Boolean =
-        status == Job.Status.PENDING &&
-                definition.enabled &&
-                definition.handlerId in handlerIds &&
-                nextRun != null &&
-                nextRun <= horizon
-
-    private fun Job.isOwnedBy(claim: JobStore.Claimed): Boolean =
-        status == Job.Status.RUNNING && lock?.token == claim.lockToken
+    override suspend fun expired(now: Instant, limit: Int): List<JobStore.Claimed> = engine.expired(now, limit)
 }

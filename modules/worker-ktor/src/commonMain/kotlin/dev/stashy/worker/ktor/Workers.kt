@@ -25,7 +25,7 @@ public val Application.workers: Worker
  *
  * ```kotlin
  * install(Workers) {
- *     jobs(InMemoryJobStore(Json)) {
+ *     jobs(LocalJobStore()) {
  *         job<EmailJob> { context, job -> send(job) }
  *         prepared<ReportJob> { context, job ->
  *             val report by resource { buildReport(job) }.onDispose { it.close() }

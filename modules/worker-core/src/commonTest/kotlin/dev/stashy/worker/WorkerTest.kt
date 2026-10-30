@@ -4,6 +4,7 @@ import dev.stashy.worker.job.InMemoryJobStore
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.JobStore
 import dev.stashy.worker.job.LateExecutionPolicy
+import dev.stashy.worker.job.LocalJobStore
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.schedule.Schedule
 import kotlinx.coroutines.CompletableDeferred
@@ -618,6 +619,25 @@ class WorkerTest {
 
         assertEquals(1, strings)
         assertEquals(1, ints)
+        worker.stop()
+    }
+
+    @Test
+    fun `local store forgets jobs once they finish`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = LocalJobStore()
+        var runs = 0
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ -> runs++ }
+        }
+
+        worker.enqueue(Unit, at = clock.now())
+        worker.enqueue(Unit, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(2, runs)
+        assertTrue(store.list().isEmpty())
         worker.stop()
     }
 

@@ -5,10 +5,8 @@ Composable, schedulable workers.
 ## Usage
 
 ```kotlin
-val store = InMemoryJobStore(Json { ignoreUnknownKeys = true })
-
 val worker = Worker(id = "api-1") {
-    jobs(store) {
+    jobs(LocalJobStore()) {
         job<EmailConfig> { context, config ->
             // context.runKey is stable across retries of this occurrence.
             send(config.email, config.content)
@@ -48,19 +46,24 @@ keep that name stable when the class is moved or renamed.
 ## Stores
 
 Each `jobs(store) { ... }` block binds a `JobStore` to the handlers it may execute. A worker can use
-several stores, and `maxConcurrentJobs` applies to each store independently. Use an
-`InMemoryJobStore` for node-local jobs:
+several stores, and `maxConcurrentJobs` applies to each store independently. Use a `LocalJobStore`
+for node-local jobs:
 
 ```kotlin
 val worker = Worker(id = "api-1") {
     jobs(sharedStore) {
         job<SendEmail> { context, config -> send(config) }
     }
-    jobs(InMemoryJobStore(Json)) {
+    jobs(LocalJobStore()) {
         job<PruneCache> { context, config -> cache.evictAll() }
     }
 }
 ```
+
+A `LocalJobStore` keeps jobs on the current node only: configs are held by reference without
+serialization, and terminal jobs are removed instead of retained.
+`InMemoryJobStore` instead retains terminal jobs for inspection and snapshots configs through a
+`StringFormat`, which suits tests.
 
 A handler may only be registered once across all stores, and the same store may only be passed to
 one `jobs` block.

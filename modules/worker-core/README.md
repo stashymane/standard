@@ -38,6 +38,8 @@ worker.schedule("nightly-email", EmailConfig(...)) {
 
 worker.enqueue(EmailConfig(...))              // as soon as possible
 worker.enqueue(EmailConfig(...), at = when)  // exact instant
+
+worker.cancel(jobId)                         // pending or running
 ```
 
 Jobs are selected by the serial name of their config type. Add `@SerialName` to the config class to
@@ -134,6 +136,18 @@ worker died, the job becomes runnable again after the configured retry delay.
 Execution is **at-least-once**. A process can die after performing side effects but before marking
 the job complete, so handlers must be idempotent. Use `Handler.Context.runKey` for deduplication.
 
+## Cancellation
+
+`worker.cancel(id)` removes a pending job immediately. A claimed job is cancelled cooperatively,
+whether it is preparing, waiting for its scheduled instant, or executing: prepared resources are
+disposed and the job leaves the queue without another attempt. Cancelling a recurring job prevents
+its next occurrence.
+
+Cancelling a running job returns once the request is recorded; the handler unwinds asynchronously,
+so it must suspend for cancellation to take effect. The worker that owns the job notices through its
+heartbeat, and the lease sweeper applies the cancellation when the owner is gone. Each cancelled
+attempt is recorded in `JobHistory` with `Status.CANCELLED`, as is a pending job that never started.
+
 ## Queue contract
 
 Database queues must implement these atomicity rules:
@@ -145,16 +159,21 @@ Database queues must implement these atomicity rules:
 3. A row whose conditional update affects no rows was claimed by another worker; skip it.
 4. `renew`, `complete`, `reschedule` and `fail` must only update a row while its `lock_token` still
    matches.
-5. `expired` returns rows with `status = RUNNING` and `lease_expires_at <= now`. The worker
-   conditionally reschedules or fails them; never claim an expired row directly, because the retry
-   delay must be respected.
-6. A `RUNNING` job always has a complete lock: token, owner, and expiration are all present. Queues
+5. `renew` reports `CANCELLATION_REQUESTED` instead of extending the lease once
+   `requestCancellation` flagged the row.
+6. `requestCancellation` removes a `PENDING` row, or flags a `RUNNING` one for its owner. The flag
+   survives rescheduling, so a row released before its owner noticed is still canceled when claimed
+   again.
+7. `expired` returns rows with `status = RUNNING` and `lease_expires_at <= now`, including their
+   cancellation flag. The worker conditionally reschedules, fails, or cancels them; never claim an
+   expired row directly, because the retry delay must be respected.
+8. A `RUNNING` job always has a complete lock: token, owner, and expiration are all present. Queues
    should map the three lock columns together so a partial lock cannot be persisted.
-7. `complete` without a next run and `fail` remove the row; `complete` with a next run and
+9. `complete` without a next run and `fail` remove the row; `complete` with a next run and
    `reschedule` return the row to `PENDING`.
-8. `create` and `update` receive the config already encoded by the queue's `ConfigCodec`;
-   `codec.decode` turns a claimed job's payload back into its config. `StringConfigCodec` wraps a
-   `StringFormat`, while `DirectConfigCodec` stores the config instance itself.
+10. `create` and `update` receive the config already encoded by the queue's `ConfigCodec`;
+    `codec.decode` turns a claimed job's payload back into its config. `StringConfigCodec` wraps a
+    `StringFormat`, while `DirectConfigCodec` stores the config instance itself.
 
 `worker-exposed` provides Exposed-based implementations of this contract and of `JobHistory`.
 

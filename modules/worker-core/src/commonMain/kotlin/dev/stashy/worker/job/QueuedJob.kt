@@ -15,6 +15,10 @@ public data class QueuedJob<P : Any>(
     public val nextRun: Instant?,
     public val attempt: Int,
     public val lock: Lock? = null,
+    /**
+     * Set when cancellation was requested while the job was running.
+     */
+    public val cancelRequested: Boolean = false,
 ) {
     init {
         require((status == Status.RUNNING) == (lock != null)) {

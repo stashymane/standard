@@ -108,6 +108,34 @@ public class Worker internal constructor(
     ): Job.Id = enqueue(jobConfig, serializer(), at)
 
     /**
+     * Cancels the job with [id], if any of the worker's queues holds it.
+     *
+     * A pending job is removed immediately. A running job is cancelled cooperatively and removed
+     * once its handler unwinds, whether it is preparing, waiting for its scheduled instant, or
+     * executing. Cancelling a recurring job prevents its next occurrence.
+     *
+     * @return true when the job was found, including when its cancellation is still in progress.
+     */
+    public suspend fun cancel(id: Job.Id): Boolean {
+        var found = false
+        for (queue in queues.distinctBy { it.store }) {
+            val job = queue.store.get(id) ?: continue
+            when (queue.store.requestCancellation(id)) {
+                JobQueue.CancellationResult.NOT_FOUND -> Unit
+
+                JobQueue.CancellationResult.REMOVED -> {
+                    found = true
+                    queueByHandler[job.definition.handlerId]?.recordCancellation(job)
+                }
+
+                JobQueue.CancellationResult.FLAGGED -> found = true
+            }
+        }
+        if (found) queues.forEach { it.cancelLocal(id) }
+        return found
+    }
+
+    /**
      * Defines and synchronizes a job using the [JobBuilder] DSL.
      */
     public suspend inline fun <reified C : Any> schedule(
@@ -200,7 +228,7 @@ public class Worker internal constructor(
     }
 
     private suspend fun shutdown(executionScope: CoroutineScope) {
-        val running = queues.flatMap { it.inFlight.values }
+        val running = queues.flatMap { it.executions }
         if (running.isNotEmpty()) {
             val toRelease = linkedSetOf<Queue.Execution>()
 
@@ -238,7 +266,7 @@ public class Worker internal constructor(
         withTimeoutOrNull(1.seconds) {
             executionScope.coroutineContext[CoroutineJob]?.cancelAndJoin()
         }
-        queues.forEach { it.inFlight.clear() }
+        queues.forEach { it.clearExecutions() }
     }
 }
 

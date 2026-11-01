@@ -37,6 +37,7 @@ internal fun ResultRow.toJob(format: StringFormat): QueuedJob<String> {
         nextRun = this[WorkerJobsTable.nextRunAt],
         attempt = this[WorkerJobsTable.attempt],
         lock = lock,
+        cancelRequested = this[WorkerJobsTable.cancelRequested],
     )
 }
 

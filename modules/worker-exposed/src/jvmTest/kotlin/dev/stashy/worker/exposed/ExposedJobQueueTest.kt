@@ -155,13 +155,61 @@ class ExposedJobQueueTest {
                 job = claim.job.copy(lock = checkNotNull(claim.job.lock).copy(token = "stale")),
             )
 
-            assertFalse(fixture.queue.renew(stale, now, 1.minutes))
+            assertEquals(JobQueue.Renewal.LOST, fixture.queue.renew(stale, now, 1.minutes))
             assertFalse(fixture.queue.complete(stale, null))
             assertFalse(fixture.queue.fail(stale))
 
-            assertTrue(fixture.queue.renew(claim, now, 1.minutes))
+            assertEquals(JobQueue.Renewal.RENEWED, fixture.queue.renew(claim, now, 1.minutes))
             assertTrue(fixture.queue.complete(claim, null))
             assertNull(fixture.queue.get(definition.id))
+        }
+    }
+
+    @Test
+    fun `cancelling a pending job removes it`() = runTest {
+        h2Queue().use { fixture ->
+            val definition = definition("cancel")
+            assertTrue(fixture.queue.create(definition, Unit, serializer(), now))
+
+            assertEquals(JobQueue.CancellationResult.REMOVED, fixture.queue.requestCancellation(definition.id))
+            assertNull(fixture.queue.get(definition.id))
+        }
+    }
+
+    @Test
+    fun `cancelling a running job flags it for its owner`() = runTest {
+        h2Queue().use { fixture ->
+            val definition = definition("cancel")
+            assertTrue(fixture.queue.create(definition, Unit, serializer(), now))
+            val claim = assertNotNull(fixture.queue.claim(request(now, lease = 1.minutes)))
+
+            assertEquals(JobQueue.CancellationResult.FLAGGED, fixture.queue.requestCancellation(definition.id))
+            val job = assertNotNull(fixture.queue.get(definition.id))
+            assertTrue(job.cancelRequested)
+            assertEquals(QueuedJob.Status.RUNNING, job.status)
+            assertEquals(JobQueue.Renewal.CANCELLATION_REQUESTED, fixture.queue.renew(claim, now, 1.minutes))
+            assertEquals(now + 1.minutes, fixture.queue.get(definition.id)?.lock?.expiresAt)
+        }
+    }
+
+    @Test
+    fun `cancelling an unknown job reports it missing`() = runTest {
+        h2Queue().use { fixture ->
+            assertEquals(JobQueue.CancellationResult.NOT_FOUND, fixture.queue.requestCancellation(Job.Id("missing")))
+        }
+    }
+
+    @Test
+    fun `expired jobs keep their cancellation request`() = runTest {
+        h2Queue().use { fixture ->
+            val definition = definition("cancel")
+            assertTrue(fixture.queue.create(definition, Unit, serializer(), now))
+            fixture.queue.claim(request(now, lease = 10.seconds))
+            fixture.queue.requestCancellation(definition.id)
+
+            val expired = fixture.queue.expired(now + 11.seconds)
+
+            assertEquals(listOf(true), expired.map { it.job.cancelRequested })
         }
     }
 

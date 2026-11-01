@@ -27,6 +27,11 @@ internal class JobExecutor<P : Any>(
     ): Unit {
         val definition = claim.job.definition
         var startedAt = config.clock.now()
+        if (claim.job.cancelRequested) {
+            applyDecision(claim, startedAt, startedAt, OccurrenceDecision.Cancelled())
+            return
+        }
+
         val binding = handlers.find(definition.handlerId)
         if (binding == null) {
             val message = "No job registered for '${definition.handlerId}'"
@@ -47,9 +52,7 @@ internal class JobExecutor<P : Any>(
         coroutineScope {
             val executionScope = this
             val heartbeat = launch {
-                heartbeat(claim) {
-                    executionScope.cancel(CancellationException("Lease lost for job '${definition.id.value}'"))
-                }
+                heartbeat(claim) { cause -> executionScope.cancel(cause) }
             }
             var prepared: Handler.Prepared? = null
             try {
@@ -80,10 +83,17 @@ internal class JobExecutor<P : Any>(
 
                 started.complete(Unit)
                 execution.execute(context)
+                currentCoroutineContext().ensureActive()
 
                 val finishedAt = config.clock.now()
                 applyDecision(claim, startedAt, finishedAt, OccurrenceDecision.success(claim, finishedAt))
             } catch (cancelled: CancellationException) {
+                if (cancelled is JobCancelledException) {
+                    val now = config.clock.now()
+                    withContext(NonCancellable) {
+                        applyDecision(claim, startedAt, now, OccurrenceDecision.Cancelled())
+                    }
+                }
                 throw cancelled
             } catch (error: Throwable) {
                 val now = config.clock.now()
@@ -110,6 +120,11 @@ internal class JobExecutor<P : Any>(
     suspend fun expire(claim: JobQueue.Claimed<P>): Unit {
         val now = config.clock.now()
         val definition = claim.job.definition
+        if (claim.job.cancelRequested) {
+            applyDecision(claim, now, now, OccurrenceDecision.Cancelled())
+            return
+        }
+
         val message = "Lease expired after ${claim.attempt} attempt(s)"
         val decision = OccurrenceDecision.failure(claim, now, message)
         if (decision !is OccurrenceDecision.Retry) {
@@ -151,6 +166,10 @@ internal class JobExecutor<P : Any>(
             is OccurrenceDecision.Fail -> attemptStore("Could not fail job '$id'") {
                 store.fail(claim)
             }
+
+            is OccurrenceDecision.Cancelled -> attemptStore("Could not cancel job '$id'") {
+                store.fail(claim)
+            }
         } ?: false
 
         if (!applied) {
@@ -179,10 +198,10 @@ internal class JobExecutor<P : Any>(
             scheduledAt = claim.scheduledAt,
             startedAt = startedAt,
             finishedAt = finishedAt,
-            status = if (decision is OccurrenceDecision.Complete && decision.error == null) {
-                JobHistory.Status.SUCCEEDED
-            } else {
-                JobHistory.Status.FAILED
+            status = when {
+                decision is OccurrenceDecision.Cancelled -> JobHistory.Status.CANCELLED
+                decision is OccurrenceDecision.Complete && decision.error == null -> JobHistory.Status.SUCCEEDED
+                else -> JobHistory.Status.FAILED
             },
             message = decision.error,
         )
@@ -221,7 +240,10 @@ internal class JobExecutor<P : Any>(
         }
     }
 
-    private suspend fun heartbeat(claim: JobQueue.Claimed<P>, onLeaseLost: () -> Unit): Unit {
+    private suspend fun heartbeat(
+        claim: JobQueue.Claimed<P>,
+        onTerminate: (CancellationException) -> Unit,
+    ): Unit {
         val id = claim.job.definition.id
         var leaseUntil = claim.job.lock?.expiresAt ?: (config.clock.now() + config.leaseDuration)
 
@@ -229,7 +251,7 @@ internal class JobExecutor<P : Any>(
             delay(config.heartbeatInterval)
             val now = config.clock.now()
 
-            val renewed = try {
+            val renewal = try {
                 store.renew(claim, now, config.leaseDuration)
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -238,14 +260,24 @@ internal class JobExecutor<P : Any>(
                 null
             }
 
-            when (renewed) {
-                true -> leaseUntil = now + config.leaseDuration
-                false -> {
+            when (renewal) {
+                JobQueue.Renewal.RENEWED -> leaseUntil = now + config.leaseDuration
+
+                JobQueue.Renewal.LOST -> {
                     config.logger.log(
                         WorkerLogger.Level.WARN,
                         "Lost the lease for job '${id.value}'; cancelling execution"
                     )
-                    onLeaseLost()
+                    onTerminate(CancellationException("Lease lost for job '${id.value}'"))
+                    return
+                }
+
+                JobQueue.Renewal.CANCELLATION_REQUESTED -> {
+                    config.logger.log(
+                        WorkerLogger.Level.INFO,
+                        "Cancellation requested for job '${id.value}'; cancelling execution",
+                    )
+                    onTerminate(JobCancelledException())
                     return
                 }
 
@@ -254,7 +286,7 @@ internal class JobExecutor<P : Any>(
                         WorkerLogger.Level.WARN,
                         "Lease for job '${id.value}' could not be renewed; cancelling execution",
                     )
-                    onLeaseLost()
+                    onTerminate(CancellationException("Lease for job '${id.value}' could not be renewed"))
                     return
                 }
             }

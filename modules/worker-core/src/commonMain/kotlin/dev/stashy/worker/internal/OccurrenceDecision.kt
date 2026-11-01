@@ -34,6 +34,11 @@ internal sealed interface OccurrenceDecision {
      */
     data class Fail(override val error: String) : OccurrenceDecision
 
+    /**
+     * The job was canceled; it is removed without another attempt.
+     */
+    data class Cancelled(override val error: String = "Cancelled") : OccurrenceDecision
+
     companion object {
         /**
          * Decision for a successful occurrence: complete it, scheduling the next one when recurring.

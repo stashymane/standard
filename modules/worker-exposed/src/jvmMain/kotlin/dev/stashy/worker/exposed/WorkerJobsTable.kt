@@ -26,6 +26,7 @@ public object WorkerJobsTable : Table("worker_jobs") {
     public val lockedBy: Column<String?> = varchar("locked_by", 255).nullable()
     public val lockToken: Column<String?> = varchar("lock_token", 64).nullable()
     public val leaseExpiresAt: Column<Instant?> = timestamp("lease_expires_at").nullable()
+    public val cancelRequested: Column<Boolean> = bool("cancel_requested").default(false)
 
     override val primaryKey: PrimaryKey = PrimaryKey(id)
 

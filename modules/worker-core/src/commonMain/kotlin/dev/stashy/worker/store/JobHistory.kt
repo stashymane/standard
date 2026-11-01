@@ -36,6 +36,7 @@ public interface JobHistory {
     public enum class Status {
         SUCCEEDED,
         FAILED,
+        CANCELLED,
     }
 
     /**

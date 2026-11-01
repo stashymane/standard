@@ -17,7 +17,9 @@ import kotlin.time.Instant
  *   increments the attempt counter, and sets the lease expiry, skipping jobs claimed concurrently
  *   by others.
  * - [renew], [complete], [reschedule], and [fail] must only modify a job while the supplied token
- *   still owns the lease, and return false otherwise.
+ *   still owns the lease; [renew] reports [Renewal.LOST] and the others return false otherwise.
+ * - [renew] reports [Renewal.CANCELLATION_REQUESTED] once [requestCancellation] flagged the job.
+ * - [requestCancellation] removes a pending job, or flags a running one for its owner to terminate.
  * - [expired] returns recently expired leases without claiming them. Callers transition those jobs
  *   with [reschedule] or [fail], which also guards against another worker acting first.
  *
@@ -62,6 +64,34 @@ public interface JobQueue<P : Any> {
          */
         public val lockToken: String
             get() = job.lock!!.token
+    }
+
+    /**
+     * The outcome of [requestCancellation].
+     */
+    public enum class CancellationResult {
+        /** The job was pending and has been removed. */
+        REMOVED,
+
+        /** The job is running and has been flagged for its owner to terminate. */
+        FLAGGED,
+
+        /** No job with the given id exists. */
+        NOT_FOUND,
+    }
+
+    /**
+     * The outcome of [renew].
+     */
+    public enum class Renewal {
+        /** The lease was extended. */
+        RENEWED,
+
+        /** The caller no longer owns the lease. */
+        LOST,
+
+        /** Cancellation was requested for the job. */
+        CANCELLATION_REQUESTED,
     }
 
     /**
@@ -118,9 +148,17 @@ public interface JobQueue<P : Any> {
     public suspend fun claim(request: ClaimRequest, limit: Int): List<Claimed<P>>
 
     /**
-     * Extends the lease. Returns false if the caller no longer owns it.
+     * Extends the lease.
      */
-    public suspend fun renew(claim: Claimed<P>, now: Instant, lease: Duration): Boolean
+    public suspend fun renew(claim: Claimed<P>, now: Instant, lease: Duration): Renewal
+
+    /**
+     * Requests cancellation of a job.
+     *
+     * A pending job is removed. A running job is flagged so that its owner notices through [renew]
+     * and terminates it.
+     */
+    public suspend fun requestCancellation(id: Job.Id): CancellationResult
 
     /**
      * Completes an occurrence and schedules [nextRunAt], or removes the job from the queue when

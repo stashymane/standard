@@ -128,10 +128,55 @@ class InMemoryJobQueueTest {
             job = claim.job.copy(lock = checkNotNull(claim.job.lock).copy(token = "stale")),
         )
 
-        assertFalse(queue.renew(stale, now, 1.minutes))
+        assertEquals(JobQueue.Renewal.LOST, queue.renew(stale, now, 1.minutes))
         assertFalse(queue.complete(stale, null))
         assertFalse(queue.fail(stale))
-        assertTrue(queue.renew(claim, now, 1.minutes))
+        assertEquals(JobQueue.Renewal.RENEWED, queue.renew(claim, now, 1.minutes))
+    }
+
+    @Test
+    fun `cancelling a pending job removes it`() = runTest {
+        val queue = InMemoryJobQueue(TestJson)
+        val definition = definition("cancel")
+        queue.create(definition, Unit, serializer(), now)
+
+        assertEquals(JobQueue.CancellationResult.REMOVED, queue.requestCancellation(definition.id))
+        assertNull(queue.get(definition.id))
+    }
+
+    @Test
+    fun `cancelling a running job flags it for its owner`() = runTest {
+        val queue = InMemoryJobQueue(TestJson)
+        val definition = definition("cancel")
+        queue.create(definition, Unit, serializer(), now)
+        val claim = assertNotNull(queue.claim(request(now, lease = 1.minutes)))
+
+        assertEquals(JobQueue.CancellationResult.FLAGGED, queue.requestCancellation(definition.id))
+        val job = assertNotNull(queue.get(definition.id))
+        assertTrue(job.cancelRequested)
+        assertEquals(QueuedJob.Status.RUNNING, job.status)
+        assertEquals(JobQueue.Renewal.CANCELLATION_REQUESTED, queue.renew(claim, now + 10.seconds, 1.minutes))
+        assertEquals(now + 1.minutes, queue.get(definition.id)?.lock?.expiresAt)
+    }
+
+    @Test
+    fun `cancelling an unknown job reports it missing`() = runTest {
+        val queue = InMemoryJobQueue(TestJson)
+
+        assertEquals(JobQueue.CancellationResult.NOT_FOUND, queue.requestCancellation(Job.Id("missing")))
+    }
+
+    @Test
+    fun `expired jobs keep their cancellation request`() = runTest {
+        val queue = InMemoryJobQueue(TestJson)
+        val definition = definition("cancel")
+        queue.create(definition, Unit, serializer(), now)
+        queue.claim(request(now, lease = 10.seconds))
+        queue.requestCancellation(definition.id)
+
+        val expired = queue.expired(now + 11.seconds)
+
+        assertEquals(listOf(true), expired.map { it.job.cancelRequested })
     }
 
     @Test

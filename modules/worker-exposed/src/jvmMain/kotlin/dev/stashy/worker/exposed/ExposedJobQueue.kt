@@ -170,10 +170,41 @@ public class ExposedJobQueue(
         }
     }
 
-    override suspend fun renew(claim: JobQueue.Claimed<String>, now: Instant, lease: Duration): Boolean = transaction {
-        WorkerJobsTable.update({ ownedBy(claim) }) {
+    override suspend fun renew(
+        claim: JobQueue.Claimed<String>,
+        now: Instant,
+        lease: Duration,
+    ): JobQueue.Renewal = transaction {
+        val renewed = WorkerJobsTable.update({
+            ownedBy(claim) and (WorkerJobsTable.cancelRequested eq false)
+        }) {
             it.setLease(now + lease)
         } == 1
+        if (renewed) return@transaction JobQueue.Renewal.RENEWED
+
+        val job = WorkerJobsTable.select(WorkerJobsTable.cancelRequested)
+            .where { ownedBy(claim) }
+            .singleOrNull()
+            ?: return@transaction JobQueue.Renewal.LOST
+        if (job[WorkerJobsTable.cancelRequested]) {
+            JobQueue.Renewal.CANCELLATION_REQUESTED
+        } else {
+            JobQueue.Renewal.LOST
+        }
+    }
+
+    override suspend fun requestCancellation(id: Job.Id): JobQueue.CancellationResult = transaction {
+        val removed = WorkerJobsTable.deleteWhere {
+            (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status eq QueuedJob.Status.PENDING)
+        } > 0
+        if (removed) return@transaction JobQueue.CancellationResult.REMOVED
+
+        val flagged = WorkerJobsTable.update({
+            (WorkerJobsTable.id eq id.value) and (WorkerJobsTable.status eq QueuedJob.Status.RUNNING)
+        }) {
+            it[WorkerJobsTable.cancelRequested] = true
+        } == 1
+        if (flagged) JobQueue.CancellationResult.FLAGGED else JobQueue.CancellationResult.NOT_FOUND
     }
 
     override suspend fun complete(claim: JobQueue.Claimed<String>, nextRunAt: Instant?): Boolean = transaction {

@@ -136,17 +136,43 @@ public class InMemoryJobQueue<P : Any>(
         return claimed
     }
 
-    override suspend fun renew(claim: JobQueue.Claimed<P>, now: Instant, lease: Duration): Boolean {
+    override suspend fun renew(
+        claim: JobQueue.Claimed<P>,
+        now: Instant,
+        lease: Duration,
+    ): JobQueue.Renewal {
         val previous = jobs.getAndUpdate { current ->
             val job = current[claim.job.definition.id]
-            if (job == null || !job.isOwnedBy(claim)) {
+            if (job == null || !job.isOwnedBy(claim) || job.cancelRequested) {
                 current
             } else {
                 val lock = checkNotNull(job.lock) { "A running job must have a lock" }
                 current + (claim.job.definition.id to job.copy(lock = lock.copy(expiresAt = now + lease)))
             }
         }
-        return previous[claim.job.definition.id]?.isOwnedBy(claim) == true
+        val job = previous[claim.job.definition.id] ?: return JobQueue.Renewal.LOST
+        return when {
+            !job.isOwnedBy(claim) -> JobQueue.Renewal.LOST
+            job.cancelRequested -> JobQueue.Renewal.CANCELLATION_REQUESTED
+            else -> JobQueue.Renewal.RENEWED
+        }
+    }
+
+    override suspend fun requestCancellation(id: Job.Id): JobQueue.CancellationResult {
+        val previous = jobs.getAndUpdate { current ->
+            val job = current[id]
+            when {
+                job == null -> current
+                job.status == QueuedJob.Status.PENDING -> current - id
+                else -> current + (id to job.copy(cancelRequested = true))
+            }
+        }
+        val job = previous[id] ?: return JobQueue.CancellationResult.NOT_FOUND
+        return if (job.status == QueuedJob.Status.PENDING) {
+            JobQueue.CancellationResult.REMOVED
+        } else {
+            JobQueue.CancellationResult.FLAGGED
+        }
     }
 
     override suspend fun complete(claim: JobQueue.Claimed<P>, nextRunAt: Instant?): Boolean {

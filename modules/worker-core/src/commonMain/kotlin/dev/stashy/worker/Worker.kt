@@ -90,6 +90,13 @@ public class Worker internal constructor(
         return job
     }
 
+    /**
+     * Starts polling in the current coroutine and suspends until the worker stops.
+     */
+    public suspend fun startSuspending(): Unit = coroutineScope {
+        start(this).join()
+    }
+
     public fun requestStop(): Unit {
         runJob.value?.cancel()
     }

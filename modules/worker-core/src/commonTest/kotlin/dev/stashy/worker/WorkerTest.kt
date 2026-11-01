@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
@@ -591,6 +592,35 @@ class WorkerTest {
 
         assertTrue(workerJob.isCancelled)
         assertTrue(failure.await() is AssertionError)
+    }
+
+    @Test
+    fun `startSuspending suspends until the worker stops`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+
+        val runner = launch { worker.startSuspending() }
+        runCurrent()
+        assertTrue(runner.isActive)
+
+        worker.requestStop()
+        runCurrent()
+        assertTrue(runner.isCompleted)
+    }
+
+    @Test
+    fun `startSuspending rethrows worker failures`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = object : JobQueue<String> by InMemoryJobQueue(TestJson) {
+            override suspend fun claim(
+                request: JobQueue.ClaimRequest,
+                limit: Int,
+            ): List<JobQueue.Claimed<String>> = throw AssertionError("boom")
+        }
+        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+
+        assertFailsWith<AssertionError> { worker.startSuspending() }
     }
 
     @Test

@@ -1,5 +1,6 @@
 package dev.stashy.worker.internal
 
+import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
 import dev.stashy.worker.WorkerLogger
 import dev.stashy.worker.handler.JobsRegistry
@@ -20,13 +21,13 @@ import kotlinx.coroutines.Job as CoroutineJob
  * A [JobQueue], its optional [JobHistory], and the handlers it may execute.
  */
 internal class Queue<P : Any>(
-    private val workerId: String,
+    private val worker: Worker,
     val store: JobQueue<P>,
     private val history: JobHistory?,
     val handlers: JobsRegistry<P>,
     private val config: WorkerConfig,
 ) {
-    private val executor = JobExecutor(workerId, store, history, handlers, config)
+    private val executor = JobExecutor(worker, store, history, handlers, config)
     private val inFlight = atomic<Map<Job.Id, Execution>>(emptyMap())
 
     /**
@@ -115,7 +116,7 @@ internal class Queue<P : Any>(
                     supportedHandlerIds = handlerIds,
                     prepareWindow = config.prepareWindow,
                     lease = config.leaseDuration,
-                    workerId = workerId,
+                    workerId = worker.id,
                 ),
                 limit = available,
             )

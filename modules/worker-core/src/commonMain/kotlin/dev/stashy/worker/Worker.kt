@@ -29,12 +29,14 @@ import kotlinx.coroutines.Job as CoroutineJob
 public class Worker internal constructor(
     public val id: String,
     private val config: WorkerConfig,
-    private val queues: List<Queue<*>>,
+    bindings: List<QueueBinding<*>>,
 ) {
     init {
         require(id.isNotBlank()) { "Worker id must not be blank" }
         config.validate()
     }
+
+    private val queues: List<Queue<*>> = bindings.map { it.toQueue(this, config) }
 
     private val queueByHandler: Map<String, Queue<*>> = buildMap {
         for (queue in queues) {

@@ -30,6 +30,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -53,6 +54,32 @@ class WorkerTest {
         runCurrent()
 
         assertEquals(1, runs)
+        worker.stop()
+    }
+
+    @Test
+    fun `jobs can access their worker and enqueue follow-up work`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val executed = mutableListOf<String>()
+        var contextWorker: Worker? = null
+        val worker = worker(clock, store) {
+            job<String> { context, config ->
+                contextWorker = context.worker
+                executed += config
+                if (config == "first") context.worker.enqueue("second", at = clock.now())
+            }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+        assertEquals(listOf("first"), executed)
+
+        advanceTimeBy(10.seconds)
+        runCurrent()
+        assertEquals(listOf("first", "second"), executed)
+        assertSame(worker, contextWorker)
         worker.stop()
     }
 
@@ -1148,16 +1175,15 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         val history = InMemoryJobHistory()
         var runs = 0
-        lateinit var workerRef: Worker
-        workerRef = worker(clock, store, history = history) {
+        val worker = worker(clock, store, history = history) {
             job<Unit> { context, _ ->
-                workerRef.cancel(context.jobId)
+                context.worker.cancel(context.jobId)
                 runs++
             }
         }
 
-        val id = workerRef.schedule("job", Unit) { once(clock.now()) }
-        workerRef.start(backgroundScope)
+        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
         runCurrent()
 
         assertEquals(1, runs)
@@ -1166,7 +1192,7 @@ class WorkerTest {
             JobHistory.Status.CANCELLED,
             assertNotNull(history.list().singleOrNull()).status,
         )
-        workerRef.stop()
+        worker.stop()
     }
 
     @Test

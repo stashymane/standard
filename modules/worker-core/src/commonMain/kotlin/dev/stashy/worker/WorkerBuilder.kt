@@ -44,7 +44,7 @@ public class WorkerBuilder internal constructor() {
     internal fun build(id: String): Worker = Worker(
         id = id,
         config = config,
-        queues = bindings.map { it.toQueue(id) },
+        bindings = bindings,
     )
 
     private fun <P : Any> binding(
@@ -56,10 +56,10 @@ public class WorkerBuilder internal constructor() {
         registry.configure()
         return QueueBinding(queue, history, registry)
     }
-
-    private fun <P : Any> QueueBinding<P>.toQueue(workerId: String): Queue<P> =
-        Queue(workerId, queue, history, handlers, config)
 }
+
+internal fun <P : Any> QueueBinding<P>.toQueue(worker: Worker, config: WorkerConfig): Queue<P> =
+    Queue(worker, queue, history, handlers, config)
 
 internal class QueueBinding<P : Any>(
     val queue: JobQueue<P>,

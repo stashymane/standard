@@ -1,5 +1,6 @@
 package dev.stashy.worker.handler
 
+import dev.stashy.worker.Worker
 import dev.stashy.worker.job.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -29,7 +30,8 @@ public interface Handler<C : Any> {
      */
     public class Context(
         public val jobId: Job.Id,
-        public val workerId: String,
+        /** The worker executing this occurrence. */
+        public val worker: Worker,
         public val attempt: Int,
         public val scheduledAt: Instant,
         public val clock: Clock,

@@ -1,5 +1,6 @@
 package dev.stashy.worker.internal
 
+import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
 import dev.stashy.worker.WorkerLogger
 import dev.stashy.worker.handler.Handler
@@ -15,7 +16,7 @@ import kotlin.time.Instant
  * Executes one claimed job and owns its lease, preparation, and occurrence decision.
  */
 internal class JobExecutor<P : Any>(
-    private val workerId: String,
+    private val worker: Worker,
     private val store: JobQueue<P>,
     private val history: JobHistory?,
     private val handlers: JobsRegistry<P>,
@@ -43,7 +44,7 @@ internal class JobExecutor<P : Any>(
 
         val context = Handler.Context(
             jobId = definition.id,
-            workerId = workerId,
+            worker = worker,
             attempt = claim.attempt,
             scheduledAt = claim.scheduledAt,
             clock = config.clock,

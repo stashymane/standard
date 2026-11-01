@@ -277,14 +277,16 @@ class ExposedJobQueueTest {
             val executed = CompletableDeferred<String>()
             val worker = Worker(id = "exposed-worker") {
                 jobs(fixture.queue) {
-                    job<String> { _, config -> executed.complete(config) }
+                    job<String> { _, config -> handler { executed.complete(config) } }
                 }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 50.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 1.seconds
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 50.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
+                    }
                 }
             }
 

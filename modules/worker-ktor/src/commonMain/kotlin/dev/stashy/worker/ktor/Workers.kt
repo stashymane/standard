@@ -20,14 +20,16 @@ public val Application.workers: Worker
  * ```kotlin
  * install(Workers) {
  *     jobs(InMemoryJobQueue(Json)) {
- *         job<EmailJob> { context, job -> send(job) }
- *         prepared<ReportJob> { context, job ->
+ *         job<EmailJob> { context, job ->
+ *             handler { send(job) } finalizedBy { outcome -> metrics.record(outcome) }
+ *         }
+ *         job<ReportJob> { context, job ->
  *             val report by resource { buildReport(job) }.onDispose { it.close() }
  *             handler { publish(report) }
  *         }
  *     }
  *     config {
- *         pollInterval = 10.seconds
+ *         defaults { pollInterval = 10.seconds }
  *     }
  * }
  *

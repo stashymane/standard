@@ -1,5 +1,6 @@
 package dev.stashy.worker.internal
 
+import dev.stashy.worker.handler.TerminalOutcome
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.schedule.Schedule
@@ -72,6 +73,23 @@ internal sealed interface OccurrenceDecision {
             val next = claim.job.definition.schedule.nextOccurrence(claim.scheduledAt, now)
             return if (next == null) Fail(error) else Complete(next, error)
         }
+    }
+}
+
+/**
+ * The outcome this decision finalizes the job with, or null while the job continues.
+ */
+internal fun OccurrenceDecision.terminalOutcome(): TerminalOutcome? = when (this) {
+    is OccurrenceDecision.Retry -> null
+
+    is OccurrenceDecision.Cancelled -> TerminalOutcome.Cancelled
+
+    is OccurrenceDecision.Fail -> TerminalOutcome.Failed(error)
+
+    is OccurrenceDecision.Complete -> when {
+        nextRunAt != null -> null
+        error != null -> TerminalOutcome.Failed(error)
+        else -> TerminalOutcome.Succeeded
     }
 }
 

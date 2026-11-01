@@ -1,5 +1,6 @@
 package dev.stashy.worker.ktor
 
+import dev.stashy.worker.JobsConfig
 import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
 import dev.stashy.worker.WorkerLogger
@@ -32,9 +33,10 @@ public class WorkersConfig {
     public fun jobs(
         queue: JobQueue<*>,
         history: JobHistory? = null,
+        config: JobsConfig.() -> Unit = {},
         configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
-        jobBlocks += JobBlock(queue, history, configure)
+        jobBlocks += JobBlock(queue, history, config, configure)
     }
 
     /**
@@ -48,7 +50,7 @@ public class WorkersConfig {
         defaultLogger: () -> WorkerLogger
     ): Worker = Worker(id = id) {
         jobBlocks.forEach { block ->
-            jobs(block.queue, block.history) { block.configure(this) }
+            jobs(block.queue, block.history, block.config) { block.configure(this) }
         }
         config {
             configBlocks.forEach { block -> block(this) }
@@ -60,6 +62,7 @@ public class WorkersConfig {
     private class JobBlock(
         val queue: JobQueue<*>,
         val history: JobHistory?,
+        val config: JobsConfig.() -> Unit,
         val configure: JobsRegistry<*>.() -> Unit,
     )
 }

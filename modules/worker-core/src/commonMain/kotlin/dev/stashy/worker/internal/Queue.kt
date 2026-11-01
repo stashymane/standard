@@ -1,5 +1,6 @@
 package dev.stashy.worker.internal
 
+import dev.stashy.worker.JobsConfig
 import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
 import dev.stashy.worker.WorkerLogger
@@ -10,11 +11,7 @@ import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.update
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.Job as CoroutineJob
 
 /**
@@ -25,9 +22,14 @@ internal class Queue<P : Any>(
     val store: JobQueue<P>,
     private val history: JobHistory?,
     val handlers: JobsRegistry<P>,
-    private val config: WorkerConfig,
+    private val workerConfig: WorkerConfig,
+    val config: JobsConfig,
 ) {
-    private val executor = JobExecutor(worker, store, history, handlers, config)
+    init {
+        config.validate()
+    }
+
+    private val executor = JobExecutor(worker, store, history, handlers, workerConfig, config)
     private val inFlight = atomic<Map<Job.Id, Execution>>(emptyMap())
 
     /**
@@ -54,7 +56,7 @@ internal class Queue<P : Any>(
      */
     suspend fun recordCancellation(job: QueuedJob<*>) {
         val history = history ?: return
-        val now = config.clock.now()
+        val now = workerConfig.clock.now()
         val entry = JobHistory.Entry(
             jobId = job.definition.id,
             handlerId = job.definition.handlerId,
@@ -70,7 +72,7 @@ internal class Queue<P : Any>(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            config.logger.log(
+            workerConfig.logger.log(
                 WorkerLogger.Level.ERROR,
                 "Could not record cancellation for job '${entry.jobId.value}'",
                 error,
@@ -88,11 +90,11 @@ internal class Queue<P : Any>(
 
     private suspend fun sweepExpired(): Unit {
         val expired = try {
-            store.expired(config.clock.now())
+            store.expired(workerConfig.clock.now())
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            config.logger.log(WorkerLogger.Level.ERROR, "Could not sweep expired worker leases", error)
+            workerConfig.logger.log(WorkerLogger.Level.ERROR, "Could not sweep expired worker leases", error)
             return
         }
 
@@ -112,7 +114,7 @@ internal class Queue<P : Any>(
         val claimed = try {
             store.claim(
                 JobQueue.ClaimRequest(
-                    now = config.clock.now(),
+                    now = workerConfig.clock.now(),
                     supportedHandlerIds = handlerIds,
                     prepareWindow = config.prepareWindow,
                     lease = config.leaseDuration,
@@ -123,7 +125,7 @@ internal class Queue<P : Any>(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            config.logger.log(WorkerLogger.Level.ERROR, "Could not claim worker jobs", error)
+            workerConfig.logger.log(WorkerLogger.Level.ERROR, "Could not claim worker jobs", error)
             return
         }
 

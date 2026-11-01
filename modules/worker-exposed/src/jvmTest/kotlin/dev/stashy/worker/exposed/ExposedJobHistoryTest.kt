@@ -68,14 +68,16 @@ class ExposedJobHistoryTest {
 
         val worker = Worker(id = "exposed-history-worker") {
             jobs(queue, history) {
-                job<String> { _, config -> executed.complete(config) }
+                job<String> { _, config -> handler { executed.complete(config) } }
             }
             config {
-                pollInterval = 10.milliseconds
-                prepareWindow = 50.milliseconds
-                leaseDuration = 1.seconds
-                heartbeatInterval = 300.milliseconds
                 shutdownGracePeriod = 1.seconds
+                defaults {
+                    pollInterval = 10.milliseconds
+                    prepareWindow = 50.milliseconds
+                    leaseDuration = 1.seconds
+                    heartbeatInterval = 300.milliseconds
+                }
             }
         }
 

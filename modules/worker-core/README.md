@@ -6,13 +6,22 @@ Composable, schedulable workers.
 
 ```kotlin
 val worker = Worker(id = "api-1") {
+    config {
+        defaults { // default values for `job {}` blocks 
+            pollInterval = 5.seconds
+            retry = RetryPolicy(maxAttempts = 5, initialDelay = 15.seconds)
+        }
+    }
+
     jobs(InMemoryJobQueue(Json)) {
         job<EmailConfig> { context, config ->
-            // context.runKey is stable across retries of this occurrence.
-            send(config.email, config.content)
+            handler {
+                // context.runKey is stable across retries of this occurrence.
+                send(config.email, config.content)
+            }
         }
 
-        prepared<TimedEmailConfig> { context, config ->
+        job<TimedEmailConfig> { context, config ->
             val database by resource { Database.connect() }
                 .onDispose { it.close() }
 
@@ -22,10 +31,6 @@ val worker = Worker(id = "api-1") {
                 send(config.email, config.content)
             }
         }
-    }
-    config {
-        pollInterval = 5.seconds
-        retry = RetryPolicy(maxAttempts = 5, initialDelay = 15.seconds)
     }
 }
 worker.start(scope)
@@ -48,15 +53,27 @@ keep that name stable when the class is moved or renamed.
 ## Queues and history
 
 Each `jobs(queue) { ... }` block binds a `JobQueue` to the handlers it may execute. A worker can use
-several queues, and `maxConcurrentJobs` applies to each block independently:
+several queues, and each block polls independently with its own settings:
 
 ```kotlin
 val worker = Worker(id = "api-1") {
     jobs(sharedQueue) {
-        job<SendEmail> { context, config -> send(config) }
+        job<SendEmail> { context, config -> handler { send(config) } }
     }
-    jobs(InMemoryJobQueue(Json)) {
-        job<PruneCache> { context, config -> cache.evictAll() }
+    jobs(InMemoryJobQueue(Json), config = { pollInterval = 1.seconds }) {
+        job<PruneCache> { context, config -> handler { cache.evictAll() } }
+    }
+}
+```
+
+Blocks start from the worker's defaults and may override `pollInterval`, `prepareWindow`,
+`leaseDuration`, `heartbeatInterval`, `maxConcurrentJobs`, and the default `retry` policy:
+
+```kotlin
+config {
+    defaults {
+        pollInterval = 5.seconds
+        prepareWindow = 30.seconds
     }
 }
 ```
@@ -71,10 +88,10 @@ val history = InMemoryJobHistory()
 
 val worker = Worker(id = "api-1") {
     jobs(sharedQueue, history) {
-        job<SendEmail> { context, config -> send(config) }
+        job<SendEmail> { context, config -> handler { send(config) } }
     }
     jobs(localQueue, history) {
-        job<PruneCache> { context, config -> cache.evictAll() }
+        job<PruneCache> { context, config -> handler { cache.evictAll() } }
     }
 }
 ```
@@ -83,15 +100,14 @@ History is optional and write-only by default; `JobHistory.Readable` adds `list`
 A handler may only be registered once across all queues and blocks, and each block records to its
 configured history.
 
-## Preparation
+## Handlers
 
-A `job` block runs at the scheduled instant.
-
-A `prepared` block runs as soon as the job is claimed, during `prepareWindow`. It must end by
-returning `handler {}`; that block runs at the scheduled instant.
+A `job` block runs as soon as the job is claimed, during the block's `prepareWindow`.
+Everything here executes on claim, meaning anything you place before the actual `handler {}` may be run multiple times.
+For this reason only the `handler` should mutate state.
 
 ```kotlin
-prepared<TimedEmailConfig> { context, config ->
+job<TimedEmailConfig> { context, config ->
     val database by resource { Database.connect() }
         .onDispose { it.close() }
 
@@ -102,7 +118,7 @@ prepared<TimedEmailConfig> { context, config ->
 
 ## Resources
 
-Both `job` and `prepared` blocks can use `resource` and `defer`:
+`job` blocks can use `resource` and `defer`:
 
 - `resource { ... }` acquires a resource immediately. `onDispose { ... }` registers its cleanup.
 - `defer { ... }` registers an action to perform after the job is completed or failed.
@@ -111,10 +127,10 @@ Both `job` and `prepared` blocks can use `resource` and `defer`:
 
 ## Scheduling
 
-- `Schedule.Once(at)` runs once at an exact instant. Jobs are claimed and prepared during
-  `prepareWindow` and start no earlier than `at`. `LateExecutionPolicy` can fail an occurrence that
-  starts too late (for example after its worker died); a retry whose instant would exceed the
-  tolerance fails the job instead of being scheduled.
+- `Schedule.Once(at)` runs once at an exact instant. Jobs are claimed and prepared during the
+  block's `prepareWindow` and start no earlier than `at`. `LateExecutionPolicy` can fail an
+  occurrence that starts too late (for example after its worker died); a retry whose instant would
+  exceed the tolerance fails the job instead of being scheduled.
 - `Schedule.FixedRate(interval, startAt)` runs at a fixed cadence and skips missed occurrences.
 - `Schedule.FixedDelay(interval)` waits after each completion.
 - `Schedule.Cron(expression, timeZoneId)` accepts modern seven-field cron expressions through the
@@ -124,8 +140,8 @@ Both `job` and `prepared` blocks can use `resource` and `defer`:
 Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or rescheduling rows
 outside `Worker.sync`.
 
-`prepareWindow` should cover the time a prepared handler needs to finish preparation. A prepared job
-keeps a slot in its queue's `maxConcurrentJobs` while waiting, so that execution can start on time.
+`prepareWindow` should cover the time a handler needs to finish preparation. A claimed job keeps a
+slot in its block's `maxConcurrentJobs` while waiting, so that execution can start on time.
 
 ## Multi-server behavior
 
@@ -147,6 +163,21 @@ Cancelling a running job returns once the request is recorded; the handler unwin
 so it must suspend for cancellation to take effect. The worker that owns the job notices through its
 heartbeat, and the lease sweeper applies the cancellation when the owner is gone. Each cancelled
 attempt is recorded in `JobHistory` with `Status.CANCELLED`, as is a pending job that never started.
+
+## Finalization
+
+Chain `finalizedBy` onto `handler {}` to run code after the job has left the queue, before prepared
+resources are disposed - so the finalizer can still use them:
+
+```kotlin
+job<SendEmail> { _, config ->
+    val metrics by resource { Metrics.connect() }
+    handler { send(config) } finalizedBy { outcome ->
+        metrics.record(config, outcome)
+    }
+}
+```
+
 
 ## Queue contract
 

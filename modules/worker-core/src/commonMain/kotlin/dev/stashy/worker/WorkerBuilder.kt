@@ -23,15 +23,16 @@ public class WorkerBuilder internal constructor() {
      *
      * A worker may use several queues, for example a shared queue for cluster-wide work and an
      * in-memory queue for node-local jobs. A handler may only be registered once across all blocks.
-     * [queue] may be passed to several [jobs] blocks; each block has its own [history] and tracks
-     * concurrency independently.
+     * [queue] may be passed to several [jobs] blocks; each block polls independently, has its own
+     * [history], and starts from the worker's [WorkerConfig.defaults], which [config] overrides.
      */
     public fun jobs(
         queue: JobQueue<*>,
         history: JobHistory? = null,
+        config: JobsConfig.() -> Unit = {},
         configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
-        bindings += binding(queue, history, configure)
+        bindings += binding(queue, history, config, configure)
     }
 
     /**
@@ -50,19 +51,21 @@ public class WorkerBuilder internal constructor() {
     private fun <P : Any> binding(
         queue: JobQueue<P>,
         history: JobHistory?,
+        config: JobsConfig.() -> Unit,
         configure: JobsRegistry<*>.() -> Unit,
     ): QueueBinding<P> {
         val registry = JobsRegistry<P>(handlerIds)
         registry.configure()
-        return QueueBinding(queue, history, registry)
+        return QueueBinding(queue, history, registry, config)
     }
 }
 
 internal fun <P : Any> QueueBinding<P>.toQueue(worker: Worker, config: WorkerConfig): Queue<P> =
-    Queue(worker, queue, history, handlers, config)
+    Queue(worker, queue, history, handlers, config, config.defaults.copy().apply(this.config))
 
 internal class QueueBinding<P : Any>(
     val queue: JobQueue<P>,
     val history: JobHistory?,
     val handlers: JobsRegistry<P>,
+    val config: JobsConfig.() -> Unit,
 )

@@ -75,7 +75,9 @@ public class Worker internal constructor(
         val job = scope.launch(config.dispatcher, start = CoroutineStart.LAZY) {
             try {
                 coroutineScope {
-                    launch { runLoop(executionScope) }
+                    queues.forEach { queue ->
+                        launch { pollLoop(executionScope, queue) }
+                    }
                     throw failure.await()
                 }
             } finally {
@@ -177,7 +179,7 @@ public class Worker internal constructor(
             id = Job.Id.random(),
             handlerId = handlerId,
             schedule = Schedule.Once(startAt),
-            retry = config.retry,
+            retry = queue.config.retry,
         )
         if (!queue.create(job, jobConfig, serializer, startAt)) {
             error("Could not enqueue job '${job.id.value}'")
@@ -225,25 +227,24 @@ public class Worker internal constructor(
         configure: JobBuilder.() -> Unit,
     ): Job.Id {
         val handlerId = serializer.descriptor.serialName
-        val job = defineJob(handlerId, id, config.retry, configure)
+        val queue = queueFor(handlerId)
+        val job = defineJob(handlerId, id, queue.config.retry, configure)
         return sync(job, jobConfig, serializer)
     }
 
     private fun queueFor(handlerId: String): Queue<*> =
         queueByHandler[handlerId] ?: error("No job registered for '$handlerId'")
 
-    private suspend fun runLoop(executionScope: CoroutineScope) {
+    private suspend fun pollLoop(executionScope: CoroutineScope, queue: Queue<*>) {
         while (currentCoroutineContext().isActive) {
-            for (queue in queues) {
-                try {
-                    queue.poll(executionScope)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    config.logger.log(WorkerLogger.Level.ERROR, "Worker queue failed", error)
-                }
+            try {
+                queue.poll(executionScope)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                config.logger.log(WorkerLogger.Level.ERROR, "Worker queue failed", error)
             }
-            delay(config.pollInterval)
+            delay(queue.config.pollInterval)
         }
     }
 

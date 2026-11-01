@@ -42,14 +42,16 @@ class WorkersPluginTest {
             install(Workers) {
                 id = "test-worker"
                 jobs(queue) {
-                    job<Unit> { _, _ -> executed.complete(Unit) }
+                    job<Unit> { _, _ -> handler { executed.complete(Unit) } }
                 }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 20.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 20.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
+                    }
                 }
             }
 
@@ -78,17 +80,19 @@ class WorkersPluginTest {
             install(Workers) {
                 id = "test-worker"
                 jobs(queue) {
-                    job<Unit> { _, _ -> }
+                    job<Unit> { _, _ -> handler { } }
                 }
                 jobs(queue) {
-                    job<String> { _, config -> executed.complete(config) }
+                    job<String> { _, config -> handler { executed.complete(config) } }
                 }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 20.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 20.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
+                    }
                 }
             }
 
@@ -119,17 +123,19 @@ class WorkersPluginTest {
             install(Workers) {
                 id = "test-worker"
                 jobs(shared, sharedHistory) {
-                    job<Unit> { _, _ -> }
+                    job<Unit> { _, _ -> handler { } }
                 }
                 jobs(local, localHistory) {
-                    job<String> { _, config -> executed.complete(config) }
+                    job<String> { _, config -> handler { executed.complete(config) } }
                 }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 20.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 20.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
+                    }
                 }
             }
 
@@ -158,16 +164,18 @@ class WorkersPluginTest {
             monitor.subscribe(ApplicationStopPreparing) { stopPreparing.complete(Unit) }
             install(Workers) {
                 jobs(InMemoryJobQueue(testFormat)) {
-                    job<Unit> { _, _ -> error("boom") }
+                    job<Unit> { _, _ -> handler { error("boom") } }
                 }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 20.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
                     logger = WorkerLogger { level, message, _ ->
                         if (level == WorkerLogger.Level.ERROR) logged.complete(message)
+                    }
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 20.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
                     }
                 }
             }
@@ -193,14 +201,16 @@ class WorkersPluginTest {
             monitor.subscribe(ApplicationStopPreparing) { stopPreparing.complete(Unit) }
             install(Workers) {
                 jobs(FailingQueue()) {
-                    job<Unit> { _, _ -> }
+                    job<Unit> { _, _ -> handler { } }
                 }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 20.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 20.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
+                    }
                 }
             }
         }
@@ -233,11 +243,13 @@ class WorkersPluginTest {
             install(Workers) {
                 jobs(InMemoryJobQueue(testFormat)) { }
                 config {
-                    pollInterval = 10.milliseconds
-                    prepareWindow = 20.milliseconds
-                    leaseDuration = 1.seconds
-                    heartbeatInterval = 300.milliseconds
                     shutdownGracePeriod = 100.milliseconds
+                    defaults {
+                        pollInterval = 10.milliseconds
+                        prepareWindow = 20.milliseconds
+                        leaseDuration = 1.seconds
+                        heartbeatInterval = 300.milliseconds
+                    }
                 }
             }
 

@@ -1,6 +1,8 @@
 package dev.stashy.worker
 
 import dev.stashy.worker.handler.JobsRegistry
+import dev.stashy.worker.handler.TerminalOutcome
+import dev.stashy.worker.handler.finalizedBy
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.job.QueuedJob
@@ -10,28 +12,10 @@ import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import dev.stashy.worker.store.memory.InMemoryJobHistory
 import dev.stashy.worker.store.memory.InMemoryJobQueue
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestCoroutineScheduler
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.*
+import kotlinx.coroutines.test.*
 import kotlinx.serialization.serializer
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertSame
-import kotlin.test.assertTrue
+import kotlin.test.*
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -46,7 +30,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         var runs = 0
         val worker = worker(clock, store) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
 
         worker.schedule("job", Unit) { once(clock.now()) }
@@ -65,9 +49,11 @@ class WorkerTest {
         var contextWorker: Worker? = null
         val worker = worker(clock, store) {
             job<String> { context, config ->
-                contextWorker = context.worker
-                executed += config
-                if (config == "first") context.worker.enqueue("second", at = clock.now())
+                handler {
+                    contextWorker = context.worker
+                    executed += config
+                    if (config == "first") context.worker.enqueue("second", at = clock.now())
+                }
             }
         }
 
@@ -90,7 +76,7 @@ class WorkerTest {
         val history = InMemoryJobHistory()
         var runs = 0
         val worker = worker(clock, store, history = history) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
 
         worker.schedule("job", Unit) { once(clock.now()) }
@@ -112,7 +98,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         var runs = 0
         val worker = worker(clock, store) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
         val at = Instant.fromEpochMilliseconds(60_000)
 
@@ -141,7 +127,7 @@ class WorkerTest {
         var preparations = 0
         var executions = 0
         val worker = worker(clock, store, prepareWindow = 1.minutes) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 preparations++
                 handler { executions++ }
             }
@@ -173,7 +159,7 @@ class WorkerTest {
         val disposed = mutableListOf<String>()
         var executions = 0
         val worker = worker(clock, store) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 val first by resource { "first" }
                     .onDispose { disposed += "first:$it" }
                 val second by resource { "second" }
@@ -194,7 +180,7 @@ class WorkerTest {
     }
 
     @Test
-    fun `simple handlers can manage resources`() = runTest {
+    fun `job blocks can manage resources`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
         var disposed: String? = null
@@ -204,7 +190,7 @@ class WorkerTest {
                 val value by resource { "simple" }
                     .onDispose { disposed = it }
                 check(value == "simple")
-                executions++
+                handler { executions++ }
             }
         }
 
@@ -223,7 +209,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         var disposed = false
         val worker = worker(clock, store, prepareWindow = 1.minutes) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 resource { "prepared" }.onDispose { disposed = true }
                 handler { }
             }
@@ -254,7 +240,7 @@ class WorkerTest {
             poll = 1.seconds,
             prepareWindow = 30.seconds,
         ) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 val value by resource { "attempt" }.onDispose { disposed += it }
                 check(value == "attempt")
                 attempts++
@@ -291,8 +277,10 @@ class WorkerTest {
             prepareWindow = 30.seconds,
         ) {
             job<Unit> { _, _ ->
-                attempts++
-                if (attempts == 1) error("boom")
+                handler {
+                    attempts++
+                    if (attempts == 1) error("boom")
+                }
             }
         }
 
@@ -322,8 +310,10 @@ class WorkerTest {
             retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
-                attempts++
-                if (attempts == 1) error("boom")
+                handler {
+                    attempts++
+                    if (attempts == 1) error("boom")
+                }
             }
         }
 
@@ -357,8 +347,10 @@ class WorkerTest {
             retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
-                attempts++
-                if (attempts == 1) throw AssertionError("boom")
+                handler {
+                    attempts++
+                    if (attempts == 1) throw AssertionError("boom")
+                }
             }
         }
 
@@ -382,7 +374,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         var runs = 0
         val worker = worker(clock, store) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
 
         worker.schedule("job", Unit) { every(20.seconds) }
@@ -414,8 +406,10 @@ class WorkerTest {
         var runs = 0
         val worker = worker(clock, store, history = history) {
             job<Unit> { _, _ ->
-                runs++
-                error("boom")
+                handler {
+                    runs++
+                    error("boom")
+                }
             }
         }
 
@@ -455,7 +449,7 @@ class WorkerTest {
             heartbeat = 1.seconds,
             poll = 1.seconds,
         ) {
-            job<Unit> { _, _ -> }
+            job<Unit> { _, _ -> handler { } }
         }
 
         val definition = Job(
@@ -497,7 +491,7 @@ class WorkerTest {
         val history = InMemoryJobHistory()
         var runs = 0
         val worker = worker(clock, store, history = history) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
 
         worker.schedule("job", Unit) {
@@ -528,8 +522,10 @@ class WorkerTest {
             retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
-                attempts++
-                error("boom")
+                handler {
+                    attempts++
+                    error("boom")
+                }
             }
         }
 
@@ -560,8 +556,10 @@ class WorkerTest {
             retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
-                attempts++
-                if (attempts == 1) error("boom")
+                handler {
+                    attempts++
+                    if (attempts == 1) error("boom")
+                }
             }
         }
 
@@ -589,7 +587,7 @@ class WorkerTest {
                 limit: Int,
             ): List<JobQueue.Claimed<String>> = throw AssertionError("boom")
         }
-        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+        val worker = worker(clock, store) { job<Unit> { _, _ -> handler { } } }
         val failure = CompletableDeferred<Throwable?>()
 
         val workerJob = worker.start(scope())
@@ -605,7 +603,7 @@ class WorkerTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
         val worker = worker(clock, store) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 resource { Unit }.onDispose { throw AssertionError("boom") }
                 handler { }
             }
@@ -625,7 +623,7 @@ class WorkerTest {
     fun `startSuspending suspends until the worker stops`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
-        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+        val worker = worker(clock, store) { job<Unit> { _, _ -> handler { } } }
 
         val runner = launch { worker.startSuspending() }
         runCurrent()
@@ -645,7 +643,7 @@ class WorkerTest {
                 limit: Int,
             ): List<JobQueue.Claimed<String>> = throw AssertionError("boom")
         }
-        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+        val worker = worker(clock, store) { job<Unit> { _, _ -> handler { } } }
 
         assertFailsWith<AssertionError> { worker.startSuspending() }
     }
@@ -654,7 +652,7 @@ class WorkerTest {
     fun `stopping the worker does not fail its job`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
-        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+        val worker = worker(clock, store) { job<Unit> { _, _ -> handler { } } }
         val failure = CompletableDeferred<Throwable?>()
 
         val workerJob = worker.start(scope())
@@ -673,7 +671,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         var runs = 0
         val worker = worker(clock, store) {
-            job<String> { _, _ -> runs++ }
+            job<String> { _, _ -> handler { runs++ } }
         }
 
         store.create(
@@ -702,8 +700,10 @@ class WorkerTest {
         val started = CompletableDeferred<Unit>()
         val worker = worker(clock, store) {
             job<Unit> { _, _ ->
-                started.complete(Unit)
-                CompletableDeferred<Unit>().await()
+                handler {
+                    started.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                }
             }
         }
 
@@ -725,7 +725,7 @@ class WorkerTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
         val worker = worker(clock, store) {
-            job<Unit> { _, _ -> }
+            job<Unit> { _, _ -> handler { } }
         }
 
         val id = worker.schedule("job", Unit) { once(clock.now()) }
@@ -765,8 +765,8 @@ class WorkerTest {
         var strings = 0
         var ints = 0
         val worker = worker(clock, store) {
-            job<String> { _, _ -> strings++ }
-            job<Int> { _, _ -> ints++ }
+            job<String> { _, _ -> handler { strings++ } }
+            job<Int> { _, _ -> handler { ints++ } }
         }
 
         worker.enqueue("hello", at = clock.now())
@@ -785,7 +785,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         var runs = 0
         val worker = worker(clock, store) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
 
         worker.enqueue(Unit, at = clock.now())
@@ -805,8 +805,8 @@ class WorkerTest {
         assertFailsWith<IllegalArgumentException> {
             Worker(id = "worker") {
                 jobs(store) {
-                    job<Unit> { _, _ -> }
-                    job<Unit> { _, _ -> }
+                    job<Unit> { _, _ -> handler { } }
+                    job<Unit> { _, _ -> handler { } }
                 }
             }
         }
@@ -822,21 +822,23 @@ class WorkerTest {
         val executed = mutableListOf<String>()
         val worker = Worker(id = "worker") {
             jobs(shared, sharedHistory) {
-                job<String> { _, config -> executed += config }
+                job<String> { _, config -> handler { executed += config } }
             }
             jobs(local, localHistory) {
-                job<Int> { _, config -> executed += config.toString() }
+                job<Int> { _, config -> handler { executed += config.toString() } }
             }
             config {
-                pollInterval = 10.seconds
-                prepareWindow = 10.seconds
-                leaseDuration = 1.minutes
-                heartbeatInterval = 20.seconds
-                maxConcurrentJobs = 4
                 shutdownGracePeriod = 1.seconds
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 this.clock = clock
                 dispatcher = StandardTestDispatcher(testScheduler)
+                defaults {
+                    pollInterval = 10.seconds
+                    prepareWindow = 10.seconds
+                    leaseDuration = 1.minutes
+                    heartbeatInterval = 20.seconds
+                    maxConcurrentJobs = 4
+                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                }
             }
         }
 
@@ -865,8 +867,8 @@ class WorkerTest {
 
         assertFailsWith<IllegalArgumentException> {
             Worker(id = "worker") {
-                jobs(first) { job<Unit> { _, _ -> } }
-                jobs(second) { job<Unit> { _, _ -> } }
+                jobs(first) { job<Unit> { _, _ -> handler { } } }
+                jobs(second) { job<Unit> { _, _ -> handler { } } }
             }
         }
     }
@@ -880,21 +882,23 @@ class WorkerTest {
         val executed = mutableListOf<String>()
         val worker = Worker(id = "worker") {
             jobs(store, stringsHistory) {
-                job<String> { _, config -> executed += config }
+                job<String> { _, config -> handler { executed += config } }
             }
             jobs(store, intsHistory) {
-                job<Int> { _, config -> executed += config.toString() }
+                job<Int> { _, config -> handler { executed += config.toString() } }
             }
             config {
-                pollInterval = 10.seconds
-                prepareWindow = 10.seconds
-                leaseDuration = 1.minutes
-                heartbeatInterval = 20.seconds
-                maxConcurrentJobs = 4
                 shutdownGracePeriod = 1.seconds
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 this.clock = clock
                 dispatcher = StandardTestDispatcher(testScheduler)
+                defaults {
+                    pollInterval = 10.seconds
+                    prepareWindow = 10.seconds
+                    leaseDuration = 1.minutes
+                    heartbeatInterval = 20.seconds
+                    maxConcurrentJobs = 4
+                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                }
             }
         }
 
@@ -916,8 +920,8 @@ class WorkerTest {
 
         assertFailsWith<IllegalArgumentException> {
             Worker(id = "worker") {
-                jobs(store) { job<Unit> { _, _ -> } }
-                jobs(store) { job<Unit> { _, _ -> } }
+                jobs(store) { job<Unit> { _, _ -> handler { } } }
+                jobs(store) { job<Unit> { _, _ -> handler { } } }
             }
         }
     }
@@ -929,18 +933,20 @@ class WorkerTest {
         val second = InMemoryJobQueue(TestJson)
         val history = InMemoryJobHistory()
         val worker = Worker(id = "worker") {
-            jobs(first, history) { job<String> { _, _ -> } }
-            jobs(second, history) { job<Int> { _, _ -> } }
+            jobs(first, history) { job<String> { _, _ -> handler { } } }
+            jobs(second, history) { job<Int> { _, _ -> handler { } } }
             config {
-                pollInterval = 10.seconds
-                prepareWindow = 10.seconds
-                leaseDuration = 1.minutes
-                heartbeatInterval = 20.seconds
-                maxConcurrentJobs = 4
                 shutdownGracePeriod = 1.seconds
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 this.clock = clock
                 dispatcher = StandardTestDispatcher(testScheduler)
+                defaults {
+                    pollInterval = 10.seconds
+                    prepareWindow = 10.seconds
+                    leaseDuration = 1.minutes
+                    heartbeatInterval = 20.seconds
+                    maxConcurrentJobs = 4
+                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                }
             }
         }
 
@@ -970,18 +976,20 @@ class WorkerTest {
         }
 
         val worker = Worker(id = "worker") {
-            jobs(first) { job<String> { _, _ -> runJob() } }
-            jobs(second) { job<Int> { _, _ -> runJob() } }
+            jobs(first) { job<String> { _, _ -> handler { runJob() } } }
+            jobs(second) { job<Int> { _, _ -> handler { runJob() } } }
             config {
-                pollInterval = 10.seconds
-                prepareWindow = 10.seconds
-                leaseDuration = 1.minutes
-                heartbeatInterval = 20.seconds
-                maxConcurrentJobs = 1
                 shutdownGracePeriod = 1.seconds
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 this.clock = clock
                 dispatcher = StandardTestDispatcher(testScheduler)
+                defaults {
+                    pollInterval = 10.seconds
+                    prepareWindow = 10.seconds
+                    leaseDuration = 1.minutes
+                    heartbeatInterval = 20.seconds
+                    maxConcurrentJobs = 1
+                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                }
             }
         }
 
@@ -1013,18 +1021,20 @@ class WorkerTest {
         }
 
         val worker = Worker(id = "worker") {
-            jobs(store) { job<String> { _, _ -> runJob() } }
-            jobs(store) { job<Int> { _, _ -> runJob() } }
+            jobs(store) { job<String> { _, _ -> handler { runJob() } } }
+            jobs(store) { job<Int> { _, _ -> handler { runJob() } } }
             config {
-                pollInterval = 10.seconds
-                prepareWindow = 10.seconds
-                leaseDuration = 1.minutes
-                heartbeatInterval = 20.seconds
-                maxConcurrentJobs = 1
                 shutdownGracePeriod = 1.seconds
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 this.clock = clock
                 dispatcher = StandardTestDispatcher(testScheduler)
+                defaults {
+                    pollInterval = 10.seconds
+                    prepareWindow = 10.seconds
+                    leaseDuration = 1.minutes
+                    heartbeatInterval = 20.seconds
+                    maxConcurrentJobs = 1
+                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                }
             }
         }
 
@@ -1047,7 +1057,7 @@ class WorkerTest {
         val history = InMemoryJobHistory()
         var runs = 0
         val worker = worker(clock, store, history = history) {
-            job<Unit> { _, _ -> runs++ }
+            job<Unit> { _, _ -> handler { runs++ } }
         }
 
         val id = worker.enqueue(Unit, at = clock.now() + 1.minutes)
@@ -1066,7 +1076,7 @@ class WorkerTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
         val worker = worker(clock, store) {
-            job<Unit> { _, _ -> }
+            job<Unit> { _, _ -> handler { } }
         }
 
         assertFalse(worker.cancel(Job.Id("missing")))
@@ -1080,7 +1090,7 @@ class WorkerTest {
         var disposed = false
         var executions = 0
         val worker = worker(clock, store, history = history, prepareWindow = 1.minutes) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 resource { "prepared" }.onDispose { disposed = true }
                 handler { executions++ }
             }
@@ -1112,7 +1122,7 @@ class WorkerTest {
         var disposed = false
         var executions = 0
         val worker = worker(clock, store, history = history, prepareWindow = 1.minutes) {
-            prepared<Unit> { _, _ ->
+            job<Unit> { _, _ ->
                 resource { "prepared" }.onDispose { disposed = true }
                 preparing.complete(Unit)
                 CompletableDeferred<Unit>().await()
@@ -1148,8 +1158,10 @@ class WorkerTest {
         val worker = worker(clock, store, history = history) {
             job<Unit> { _, _ ->
                 resource { "running" }.onDispose { disposed = true }
-                started.complete(Unit)
-                CompletableDeferred<Unit>().await()
+                handler {
+                    started.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                }
             }
         }
 
@@ -1177,8 +1189,10 @@ class WorkerTest {
         var runs = 0
         val worker = worker(clock, store, history = history) {
             job<Unit> { context, _ ->
-                context.worker.cancel(context.jobId)
-                runs++
+                handler {
+                    context.worker.cancel(context.jobId)
+                    runs++
+                }
             }
         }
 
@@ -1209,7 +1223,7 @@ class WorkerTest {
             heartbeat = 1.seconds,
             poll = 1.seconds,
         ) {
-            job<Unit> { _, _ -> }
+            job<Unit> { _, _ -> handler { } }
         }
 
         val definition = Job(
@@ -1251,9 +1265,11 @@ class WorkerTest {
         var runs = 0
         val worker = worker(clock, store, history = history) {
             job<Unit> { _, _ ->
-                runs++
-                running.complete(Unit)
-                gate.await()
+                handler {
+                    runs++
+                    running.complete(Unit)
+                    gate.await()
+                }
             }
         }
 
@@ -1284,10 +1300,392 @@ class WorkerTest {
         worker.stop()
     }
 
+    @Test
+    fun `finalize reports a completed one-shot job`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val configs = mutableListOf<String>()
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<String>() { _, config ->
+                handler {} finalizedBy { outcome ->
+                    configs += config
+                    outcomes += outcome
+                }
+            }
+        }
+
+        worker.schedule("job", "payload") { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(listOf("payload"), configs)
+        assertEquals(listOf<TerminalOutcome>(TerminalOutcome.Succeeded), outcomes)
+        worker.stop()
+    }
+
+    @Test
+    fun `finalizers can use prepared resources before they are disposed`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val events = mutableListOf<String>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ ->
+                val value by resource { "prepared" }.onDispose { events += "disposed:$it" }
+                handler { events += "ran" } finalizedBy { outcome ->
+                    events += "finalized:$value:$outcome"
+                }
+            }
+        }
+
+        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(listOf("ran", "finalized:prepared:Succeeded", "disposed:prepared"), events)
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize reports an exhausted job as failed`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(
+            clock = clock,
+            store = store,
+            retry = RetryPolicy(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0),
+        ) {
+            job<Unit> { _, _ ->
+                handler { error("boom") } finalizedBy { outcome -> outcomes += outcome }
+            }
+        }
+
+        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(
+            listOf<TerminalOutcome>(TerminalOutcome.Failed("Attempts exhausted: boom")),
+            outcomes,
+        )
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize reports a job that started too late as failed`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ -> handler { } finalizedBy { outcome -> outcomes += outcome } }
+        }
+
+        worker.schedule("job", Unit) {
+            once(Instant.fromEpochMilliseconds(0))
+            latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
+        }
+        advanceTimeBy(10.seconds)
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(
+            listOf<TerminalOutcome>(TerminalOutcome.Failed("Job started 10s after its scheduled instant")),
+            outcomes,
+        )
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize reports a retry that exceeded the late tolerance as failed`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(
+            clock = clock,
+            store = store,
+            retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+        ) {
+            job<Unit> { _, _ ->
+                handler { error("boom") } finalizedBy { outcome -> outcomes += outcome }
+            }
+        }
+
+        worker.schedule("job", Unit) {
+            once(clock.now())
+            latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
+        }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(
+            listOf<TerminalOutcome>(
+                TerminalOutcome.Failed("Next attempt would start 10s after its scheduled instant: boom"),
+            ),
+            outcomes,
+        )
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize does not run for a cancelled pending job`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ -> handler { } finalizedBy { outcome -> outcomes += outcome } }
+        }
+
+        val id = worker.enqueue(Unit, at = clock.now() + 1.minutes)
+        assertTrue(worker.cancel(id))
+
+        assertTrue(outcomes.isEmpty())
+    }
+
+    @Test
+    fun `finalize reports a cancelled running job`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val started = CompletableDeferred<Unit>()
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ ->
+                handler {
+                    started.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                } finalizedBy { outcome -> outcomes += outcome }
+            }
+        }
+
+        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+        assertTrue(started.isCompleted)
+
+        assertTrue(worker.cancel(id))
+        runCurrent()
+
+        assertEquals(listOf<TerminalOutcome>(TerminalOutcome.Cancelled), outcomes)
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize does not run for a cancellation applied by the sweeper`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val handlerId = serializer<Unit>().descriptor.serialName
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(
+            clock = clock,
+            store = store,
+            lease = 5.seconds,
+            heartbeat = 1.seconds,
+            poll = 1.seconds,
+        ) {
+            job<Unit> { _, _ -> handler { } finalizedBy { outcome -> outcomes += outcome } }
+        }
+
+        val definition = Job(
+            id = Job.Id("crashed"),
+            handlerId = handlerId,
+            schedule = Schedule.Once(clock.now()),
+        )
+        store.create(definition, Unit, serializer(), clock.now())
+        store.claim(
+            JobQueue.ClaimRequest(
+                now = clock.now(),
+                supportedHandlerIds = setOf(handlerId),
+                prepareWindow = 1.seconds,
+                lease = 5.seconds,
+                workerId = "dead-worker",
+            ),
+        )
+        assertEquals(JobQueue.CancellationResult.FLAGGED, store.requestCancellation(definition.id))
+
+        worker.start(backgroundScope)
+        advanceTimeBy(6.seconds)
+        runCurrent()
+
+        assertTrue(outcomes.isEmpty())
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize does not run while a recurring job continues`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ -> handler { } finalizedBy { outcome -> outcomes += outcome } }
+        }
+
+        worker.schedule("job", Unit) { every(20.seconds) }
+        worker.start(backgroundScope)
+        advanceTimeBy(21.seconds)
+        runCurrent()
+
+        assertTrue(outcomes.isEmpty())
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize does not run when a recurring occurrence exhausts its attempts`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ ->
+                handler { error("boom") } finalizedBy { outcome -> outcomes += outcome }
+            }
+        }
+
+        worker.schedule("job", Unit) {
+            every(20.seconds)
+            retry = RetryPolicy(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
+        }
+        worker.start(backgroundScope)
+        advanceTimeBy(21.seconds)
+        runCurrent()
+
+        assertTrue(outcomes.isEmpty())
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize does not run when shutdown releases a job`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val started = CompletableDeferred<Unit>()
+        val outcomes = mutableListOf<TerminalOutcome>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ ->
+                handler {
+                    started.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                } finalizedBy { outcome -> outcomes += outcome }
+            }
+        }
+
+        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+        assertTrue(started.isCompleted)
+
+        worker.stop()
+
+        assertTrue(outcomes.isEmpty())
+        assertNotNull(store.get(Job.Id("job")))
+    }
+
+    @Test
+    fun `a failing finalize callback does not affect the job`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val history = InMemoryJobHistory()
+        val worker = worker(clock, store, history = history) {
+            job<Unit> { _, _ ->
+                handler { } finalizedBy { throw AssertionError("boom") }
+            }
+        }
+
+        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertNull(store.get(id))
+        assertEquals(JobHistory.Status.SUCCEEDED, assertNotNull(history.list().singleOrNull()).status)
+        worker.stop()
+    }
+
+    @Test
+    fun `finalize does not run when preparation fails`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        var finalized = 0
+        val worker = worker(clock, store) {
+            job<String> { context, _ ->
+                check(context.attempt < 0) { "preparation failed" }
+                handler { } finalizedBy { finalized++ }
+            }
+        }
+
+        worker.schedule("job", "config") { once(clock.now()) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(0, finalized)
+        worker.stop()
+    }
+
+    @Test
+    fun `jobs blocks can override the worker defaults`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        var prepared = 0
+        val worker = Worker(id = "worker") {
+            jobs(store, config = { prepareWindow = 1.minutes }) {
+                job<Unit> { _, _ ->
+                    prepared++
+                    handler { }
+                }
+            }
+            config {
+                shutdownGracePeriod = 1.seconds
+                this.clock = clock
+                dispatcher = StandardTestDispatcher(testScheduler)
+                defaults {
+                    pollInterval = 10.seconds
+                    prepareWindow = 10.seconds
+                    leaseDuration = 1.minutes
+                    heartbeatInterval = 20.seconds
+                }
+            }
+        }
+
+        worker.schedule("job", Unit) { once(Instant.fromEpochMilliseconds(50_000)) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(1, prepared)
+        worker.stop()
+    }
+
+    @Test
+    fun `enqueued jobs use their block's default retry policy`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val retry = RetryPolicy(maxAttempts = 9, initialDelay = 1.seconds, jitter = 0.0)
+        val worker = Worker(id = "worker") {
+            jobs(store, config = { this.retry = retry }) {
+                job<Unit> { _, _ -> handler { } }
+            }
+            config {
+                this.clock = clock
+                dispatcher = StandardTestDispatcher(testScheduler)
+            }
+        }
+
+        val id = worker.enqueue(Unit, at = clock.now())
+        assertEquals(retry, assertNotNull(store.get(id)).definition.retry)
+    }
+
+    @Test
+    fun `invalid block config is rejected`() {
+        val store = InMemoryJobQueue(TestJson)
+
+        assertFailsWith<IllegalArgumentException> {
+            Worker(id = "worker") {
+                jobs(store, config = { pollInterval = 1.minutes; prepareWindow = 10.seconds }) {
+                    job<Unit> { _, _ -> handler { } }
+                }
+            }
+        }
+    }
+
     private fun TestScope.scope(): CoroutineScope = CoroutineScope(
         SupervisorJob() +
-            StandardTestDispatcher(testScheduler) +
-            CoroutineExceptionHandler { _, _ -> },
+                StandardTestDispatcher(testScheduler) +
+                CoroutineExceptionHandler { _, _ -> },
     )
 
     private fun TestScope.worker(
@@ -1303,15 +1701,17 @@ class WorkerTest {
     ): Worker = Worker(id = "worker") {
         jobs(store, history) { configureHandlers() }
         config {
-            pollInterval = poll
-            this.prepareWindow = prepareWindow
-            leaseDuration = lease
-            heartbeatInterval = heartbeat
-            maxConcurrentJobs = 4
             shutdownGracePeriod = 1.seconds
-            this.retry = retry
             this.clock = clock
             dispatcher = StandardTestDispatcher(testScheduler)
+            defaults {
+                pollInterval = poll
+                this.prepareWindow = prepareWindow
+                leaseDuration = lease
+                heartbeatInterval = heartbeat
+                maxConcurrentJobs = 4
+                this.retry = retry
+            }
         }
     }
 

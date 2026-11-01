@@ -10,27 +10,26 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
- * A composable unit of work, selected by the serial name of its config type.
- *
- * [prepare] runs as soon as the job is claimed. It may acquire resources and do any work that
- * should happen before the scheduled instant. The returned [Prepared] is executed only when the
- * job becomes due.
- *
- * [configSerializer] persists and restores each job's configuration.
+ * A composable unit of work.
  */
 public interface Handler<C : Any> {
     public val configSerializer: KSerializer<C>
 
+    /**
+     * Prepares a job handler as soon as the job is claimed by a [Worker], during the block's prepare window.
+     *
+     * This function is meant for initialization and should **never** modify state,
+     * as it may run more than once for the same job.
+     */
     public suspend fun prepare(context: Context, config: C): Prepared
+
+    public typealias Finalizer = suspend (Context, TerminalOutcome) -> Unit
 
     /**
      * Information about the current occurrence.
-     *
-     * [runKey] is stable across retries of the same occurrence and can be used for idempotency.
      */
     public class Context(
         public val jobId: Job.Id,
-        /** The worker executing this occurrence. */
         public val worker: Worker,
         public val attempt: Int,
         public val scheduledAt: Instant,
@@ -40,69 +39,69 @@ public interface Handler<C : Any> {
     }
 
     /**
-     * A prepared execution. [execute] runs at the scheduled instant; [dispose] releases any
-     * resources acquired by [prepare] and runs on every path after preparation succeeded.
+     * A prepared handler, ready to execute or finalize an occurrence.
      */
     public class Prepared(
         private val run: suspend (Context) -> Unit,
         private val cleanup: suspend () -> Unit = {},
+        private val onFinalize: Finalizer = { _, _ -> },
     ) {
+        /**
+         * Executes the prepared job.
+         */
         public suspend fun execute(context: Context): Unit = run(context)
 
+        /**
+         * Releases all resources acquired during the preparation phase.
+         */
         public suspend fun dispose(): Unit = cleanup()
+
+        /**
+         * Completes the job after it's left the queue with the given [outcome].
+         */
+        public suspend fun finalize(context: Context, outcome: TerminalOutcome): Unit =
+            onFinalize(context, outcome)
     }
 
     /**
-     * The execution block returned by `handler {}` inside a `prepared` block.
+     * A builder for a [Prepared] execution.
      */
-    public class Execution @PublishedApi internal constructor(
+    public class Builder @PublishedApi internal constructor(
         @PublishedApi internal val run: suspend (Context) -> Unit,
-    )
-}
-
-/**
- * Creates a handler whose block runs at the scheduled instant.
- */
-public inline fun <reified C : Any> job(
-    noinline block: suspend HandlerScope.(Handler.Context, C) -> Unit,
-): Handler<C> = object : Handler<C> {
-    override val configSerializer: KSerializer<C> = serializer()
-
-    override suspend fun prepare(context: Handler.Context, config: C): Handler.Prepared {
-        var scope: HandlerScope? = null
-        return Handler.Prepared(
-            run = { executionContext ->
-                val executionScope = HandlerScope()
-                scope = executionScope
-                executionScope.block(executionContext, config)
-            },
-            cleanup = { withContext(NonCancellable) { scope?.dispose() } },
-        )
+        @PublishedApi internal var onFinalize: Finalizer = { _, _ -> },
+    ) {
+        @PublishedApi
+        internal fun build(cleanup: suspend () -> Unit): Prepared =
+            Prepared(run, cleanup, onFinalize)
     }
 }
 
 /**
- * Creates a handler with a preparation stage.
- *
- * The block runs when the job is claimed. It must end by returning the result of `handler {}`;
- * that block runs at the scheduled instant.
+ * Creates a job handler.
  */
-public inline fun <reified C : Any> prepared(
-    noinline block: suspend PreparationScope.(Handler.Context, C) -> Handler.Execution,
+public inline fun <reified C : Any> job(
+    noinline block: suspend JobScope.(Handler.Context, C) -> Handler.Builder,
 ): Handler<C> = object : Handler<C> {
     override val configSerializer: KSerializer<C> = serializer()
 
     override suspend fun prepare(context: Handler.Context, config: C): Handler.Prepared {
-        val scope = PreparationScope()
+        val scope = JobScope()
         return try {
-            val execution = scope.block(context, config)
-            Handler.Prepared(
-                run = { executionContext -> execution.run(executionContext) },
-                cleanup = { withContext(NonCancellable) { scope.dispose() } },
-            )
+            scope.block(context, config).build(cleanup = {
+                withContext(NonCancellable) { scope.dispose() }
+            })
         } catch (error: Throwable) {
             withContext(NonCancellable) { scope.dispose() }
             throw error
         }
     }
 }
+
+/**
+ * Adds a finalizer to this handler.
+ *
+ * The block runs after the job has left the queue, while prepared resources are still available.
+ */
+public infix fun Handler.Builder.finalizedBy(
+    block: suspend Handler.Context.(TerminalOutcome) -> Unit,
+): Handler.Builder = apply { onFinalize = block }

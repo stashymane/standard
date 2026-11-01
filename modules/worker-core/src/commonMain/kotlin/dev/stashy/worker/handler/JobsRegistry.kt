@@ -1,5 +1,6 @@
 package dev.stashy.worker.handler
 
+import dev.stashy.worker.JobsDsl
 import dev.stashy.worker.internal.HandlerBinding
 import dev.stashy.worker.internal.handlerBinding
 
@@ -16,21 +17,12 @@ public class JobsRegistry<P : Any> internal constructor(
     private val bindings = mutableMapOf<String, HandlerBinding<P>>()
 
     /**
-     * Registers a handler whose block runs at the scheduled instant.
+     * Registers a handler whose block runs when the job is claimed.
      */
     public inline fun <reified C : Any> job(
-        noinline block: suspend HandlerScope.(Handler.Context, C) -> Unit,
+        noinline block: suspend JobScope.(Handler.Context, C) -> Handler.Builder,
     ): Unit {
         register(dev.stashy.worker.handler.job(block))
-    }
-
-    /**
-     * Registers a handler with a preparation stage.
-     */
-    public inline fun <reified C : Any> prepared(
-        noinline block: suspend PreparationScope.(Handler.Context, C) -> Handler.Execution,
-    ): Unit {
-        register(dev.stashy.worker.handler.prepared(block))
     }
 
     public fun <C : Any> register(handler: Handler<C>): Unit {

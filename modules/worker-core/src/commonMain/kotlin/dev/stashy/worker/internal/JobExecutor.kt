@@ -1,5 +1,6 @@
 package dev.stashy.worker.internal
 
+import dev.stashy.worker.JobsConfig
 import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
 import dev.stashy.worker.WorkerLogger
@@ -20,35 +21,31 @@ internal class JobExecutor<P : Any>(
     private val store: JobQueue<P>,
     private val history: JobHistory?,
     private val handlers: JobsRegistry<P>,
-    private val config: WorkerConfig,
+    private val workerConfig: WorkerConfig,
+    private val config: JobsConfig,
 ) {
     suspend fun execute(
         claim: JobQueue.Claimed<P>,
         started: CompletableDeferred<Unit>,
     ): Unit {
         val definition = claim.job.definition
-        var startedAt = config.clock.now()
+        var startedAt = workerConfig.clock.now()
+        val binding = handlers.find(definition.handlerId)
+
         if (claim.job.cancelRequested) {
             applyDecision(claim, startedAt, startedAt, OccurrenceDecision.Cancelled())
             return
         }
 
-        val binding = handlers.find(definition.handlerId)
         if (binding == null) {
             val message = "No job registered for '${definition.handlerId}'"
-            config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}': $message")
-            val now = config.clock.now()
+            workerConfig.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}': $message")
+            val now = workerConfig.clock.now()
             applyDecision(claim, startedAt, now, OccurrenceDecision.terminal(claim, now, message))
             return
         }
 
-        val context = Handler.Context(
-            jobId = definition.id,
-            worker = worker,
-            attempt = claim.attempt,
-            scheduledAt = claim.scheduledAt,
-            clock = config.clock,
-        )
+        val context = contextFor(claim)
 
         coroutineScope {
             val executionScope = this
@@ -61,12 +58,12 @@ internal class JobExecutor<P : Any>(
                     binding.prepare(store, claim, context)
                 } catch (invalid: InvalidHandlerPayloadException) {
                     val message = "Could not decode job config: ${invalid.message ?: "invalid config"}"
-                    config.logger.log(
+                    workerConfig.logger.log(
                         WorkerLogger.Level.ERROR,
                         "Job '${definition.id.value}': $message",
                         invalid,
                     )
-                    val now = config.clock.now()
+                    val now = workerConfig.clock.now()
                     applyDecision(claim, startedAt, now, OccurrenceDecision.terminal(claim, now, message))
                     return@coroutineScope
                 }
@@ -74,11 +71,11 @@ internal class JobExecutor<P : Any>(
 
                 awaitScheduled(claim)
 
-                startedAt = config.clock.now()
+                startedAt = workerConfig.clock.now()
                 if (definition.startsTooLate(startedAt, claim.scheduledAt)) {
                     val message = "Job started ${startedAt - claim.scheduledAt} after its scheduled instant"
-                    config.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': $message")
-                    applyDecision(claim, startedAt, startedAt, OccurrenceDecision.Fail(message))
+                    workerConfig.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': $message")
+                    applyDecision(claim, startedAt, startedAt, OccurrenceDecision.Fail(message), prepared)
                     return@coroutineScope
                 }
 
@@ -86,24 +83,24 @@ internal class JobExecutor<P : Any>(
                 execution.execute(context)
                 currentCoroutineContext().ensureActive()
 
-                val finishedAt = config.clock.now()
-                applyDecision(claim, startedAt, finishedAt, OccurrenceDecision.success(claim, finishedAt))
+                val finishedAt = workerConfig.clock.now()
+                applyDecision(claim, startedAt, finishedAt, OccurrenceDecision.success(claim, finishedAt), prepared)
             } catch (cancelled: CancellationException) {
                 if (cancelled is JobCancelledException) {
-                    val now = config.clock.now()
+                    val now = workerConfig.clock.now()
                     withContext(NonCancellable) {
-                        applyDecision(claim, startedAt, now, OccurrenceDecision.Cancelled())
+                        applyDecision(claim, startedAt, now, OccurrenceDecision.Cancelled(), prepared)
                     }
                 }
                 throw cancelled
             } catch (error: Throwable) {
-                val now = config.clock.now()
+                val now = workerConfig.clock.now()
                 val message = error.message ?: error::class.simpleName ?: "Unknown handler failure"
-                config.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}' failed", error)
+                workerConfig.logger.log(WorkerLogger.Level.ERROR, "Job '${definition.id.value}' failed", error)
                 val decision = OccurrenceDecision.failure(claim, now, message)
-                val applied = applyDecision(claim, startedAt, now, decision)
+                val applied = applyDecision(claim, startedAt, now, decision, prepared)
                 if (applied && decision is OccurrenceDecision.Retry) {
-                    config.logger.log(
+                    workerConfig.logger.log(
                         WorkerLogger.Level.WARN,
                         "Job '${definition.id.value}' will retry at ${decision.retryAt}",
                     )
@@ -119,7 +116,7 @@ internal class JobExecutor<P : Any>(
      * Handles a lease that expired before the worker could finish the job.
      */
     suspend fun expire(claim: JobQueue.Claimed<P>): Unit {
-        val now = config.clock.now()
+        val now = workerConfig.clock.now()
         val definition = claim.job.definition
         if (claim.job.cancelRequested) {
             applyDecision(claim, now, now, OccurrenceDecision.Cancelled())
@@ -129,11 +126,11 @@ internal class JobExecutor<P : Any>(
         val message = "Lease expired after ${claim.attempt} attempt(s)"
         val decision = OccurrenceDecision.failure(claim, now, message)
         if (decision !is OccurrenceDecision.Retry) {
-            config.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': ${decision.error}")
+            workerConfig.logger.log(WorkerLogger.Level.WARN, "Job '${definition.id.value}': ${decision.error}")
         }
         val applied = applyDecision(claim, now, now, decision)
         if (applied && decision is OccurrenceDecision.Retry) {
-            config.logger.log(
+            workerConfig.logger.log(
                 WorkerLogger.Level.WARN,
                 "Job '${definition.id.value}' will retry at ${decision.retryAt} ($message)",
             )
@@ -144,7 +141,7 @@ internal class JobExecutor<P : Any>(
      * Releases a claimed job during worker shutdown, making it runnable again immediately.
      */
     suspend fun release(claim: JobQueue.Claimed<P>, reason: String): Unit {
-        val now = config.clock.now()
+        val now = workerConfig.clock.now()
         applyDecision(claim, now, now, OccurrenceDecision.Retry(now, reason))
     }
 
@@ -153,6 +150,7 @@ internal class JobExecutor<P : Any>(
         startedAt: Instant,
         finishedAt: Instant,
         decision: OccurrenceDecision,
+        prepared: Handler.Prepared? = null,
     ): Boolean {
         val id = claim.job.definition.id.value
         val applied = when (decision) {
@@ -174,7 +172,7 @@ internal class JobExecutor<P : Any>(
         } ?: false
 
         if (!applied) {
-            config.logger.log(
+            workerConfig.logger.log(
                 WorkerLogger.Level.WARN,
                 "Lost the lease for job '$id' before its decision could be stored",
             )
@@ -182,7 +180,36 @@ internal class JobExecutor<P : Any>(
         }
 
         recordHistory(claim, startedAt, finishedAt, decision)
+        notifyFinalized(claim, decision, prepared)
         return true
+    }
+
+    private fun contextFor(claim: JobQueue.Claimed<P>): Handler.Context = Handler.Context(
+        jobId = claim.job.definition.id,
+        worker = worker,
+        attempt = claim.attempt,
+        scheduledAt = claim.scheduledAt,
+        clock = workerConfig.clock,
+    )
+
+    private suspend fun notifyFinalized(
+        claim: JobQueue.Claimed<P>,
+        decision: OccurrenceDecision,
+        prepared: Handler.Prepared?,
+    ) {
+        val outcome = decision.terminalOutcome() ?: return
+        if (prepared == null) return
+        try {
+            prepared.finalize(contextFor(claim), outcome)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            workerConfig.logger.log(
+                WorkerLogger.Level.ERROR,
+                "Could not finalize job '${claim.job.definition.id.value}'",
+                error,
+            )
+        }
     }
 
     private suspend fun recordHistory(
@@ -217,13 +244,13 @@ internal class JobExecutor<P : Any>(
             }
         } catch (cancelled: CancellationException) {
             caller.ensureActive()
-            config.logger.log(
+            workerConfig.logger.log(
                 WorkerLogger.Level.WARN,
                 "Cleanup was cancelled for prepared job '${claim.job.definition.id.value}'",
                 cancelled,
             )
         } catch (error: Exception) {
-            config.logger.log(
+            workerConfig.logger.log(
                 WorkerLogger.Level.ERROR,
                 "Could not dispose prepared job '${claim.job.definition.id.value}'",
                 error,
@@ -235,7 +262,7 @@ internal class JobExecutor<P : Any>(
     private suspend fun awaitScheduled(claim: JobQueue.Claimed<P>): Unit {
         val executeAt = maxOf(claim.scheduledAt, claim.job.nextRun ?: claim.scheduledAt)
         while (true) {
-            val remaining = executeAt - config.clock.now()
+            val remaining = executeAt - workerConfig.clock.now()
             if (remaining <= Duration.ZERO) return
             delay(remaining)
         }
@@ -246,18 +273,18 @@ internal class JobExecutor<P : Any>(
         onTerminate: (CancellationException) -> Unit,
     ): Unit {
         val id = claim.job.definition.id
-        var leaseUntil = claim.job.lock?.expiresAt ?: (config.clock.now() + config.leaseDuration)
+        var leaseUntil = claim.job.lock?.expiresAt ?: (workerConfig.clock.now() + config.leaseDuration)
 
         while (currentCoroutineContext().isActive) {
             delay(config.heartbeatInterval)
-            val now = config.clock.now()
+            val now = workerConfig.clock.now()
 
             val renewal = try {
                 store.renew(claim, now, config.leaseDuration)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                config.logger.log(WorkerLogger.Level.WARN, "Could not renew lease for job '${id.value}'", error)
+                workerConfig.logger.log(WorkerLogger.Level.WARN, "Could not renew lease for job '${id.value}'", error)
                 null
             }
 
@@ -265,7 +292,7 @@ internal class JobExecutor<P : Any>(
                 JobQueue.Renewal.RENEWED -> leaseUntil = now + config.leaseDuration
 
                 JobQueue.Renewal.LOST -> {
-                    config.logger.log(
+                    workerConfig.logger.log(
                         WorkerLogger.Level.WARN,
                         "Lost the lease for job '${id.value}'; cancelling execution"
                     )
@@ -274,7 +301,7 @@ internal class JobExecutor<P : Any>(
                 }
 
                 JobQueue.Renewal.CANCELLATION_REQUESTED -> {
-                    config.logger.log(
+                    workerConfig.logger.log(
                         WorkerLogger.Level.INFO,
                         "Cancellation requested for job '${id.value}'; cancelling execution",
                     )
@@ -283,7 +310,7 @@ internal class JobExecutor<P : Any>(
                 }
 
                 null -> if (now >= leaseUntil) {
-                    config.logger.log(
+                    workerConfig.logger.log(
                         WorkerLogger.Level.WARN,
                         "Lease for job '${id.value}' could not be renewed; cancelling execution",
                     )
@@ -300,7 +327,7 @@ internal class JobExecutor<P : Any>(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            config.logger.log(WorkerLogger.Level.ERROR, failureMessage, error)
+            workerConfig.logger.log(WorkerLogger.Level.ERROR, failureMessage, error)
             null
         }
 }

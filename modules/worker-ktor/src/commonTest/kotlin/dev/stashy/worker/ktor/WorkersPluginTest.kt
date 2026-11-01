@@ -1,8 +1,10 @@
 package dev.stashy.worker.ktor
 
 import dev.stashy.worker.WorkerLogger
+import dev.stashy.worker.store.JobQueue
 import dev.stashy.worker.store.memory.InMemoryJobHistory
 import dev.stashy.worker.store.memory.InMemoryJobQueue
+import io.ktor.server.application.ApplicationStopPreparing
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CompletableDeferred
@@ -11,6 +13,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -20,6 +23,13 @@ import kotlin.time.Duration.Companion.seconds
 private val testFormat: Json = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
+}
+
+private class FailingQueue : JobQueue<String> by InMemoryJobQueue(testFormat) {
+    override suspend fun claim(
+        request: JobQueue.ClaimRequest,
+        limit: Int,
+    ): List<JobQueue.Claimed<String>> = throw AssertionError("boom")
 }
 
 class WorkersPluginTest {
@@ -142,8 +152,10 @@ class WorkersPluginTest {
     @Test
     fun `plugin logs through the configured logger`() = testApplication {
         val logged = CompletableDeferred<String>()
+        val stopPreparing = CompletableDeferred<Unit>()
 
         application {
+            monitor.subscribe(ApplicationStopPreparing) { stopPreparing.complete(Unit) }
             install(Workers) {
                 jobs(InMemoryJobQueue(testFormat)) {
                     job<Unit> { _, _ -> error("boom") }
@@ -170,6 +182,32 @@ class WorkersPluginTest {
         startApplication()
 
         assertTrue(withTimeout(5.seconds) { logged.await() }.contains("failed"))
+        assertFalse(stopPreparing.isCompleted)
+    }
+
+    @Test
+    fun `plugin stops the application when the worker fails`() = testApplication {
+        val stopPreparing = CompletableDeferred<Unit>()
+
+        application {
+            monitor.subscribe(ApplicationStopPreparing) { stopPreparing.complete(Unit) }
+            install(Workers) {
+                jobs(FailingQueue()) {
+                    job<Unit> { _, _ -> }
+                }
+                config {
+                    pollInterval = 10.milliseconds
+                    prepareWindow = 20.milliseconds
+                    leaseDuration = 1.seconds
+                    heartbeatInterval = 300.milliseconds
+                    shutdownGracePeriod = 100.milliseconds
+                }
+            }
+        }
+
+        startApplication()
+
+        withTimeout(5.seconds) { stopPreparing.await() }
     }
 
     @Test

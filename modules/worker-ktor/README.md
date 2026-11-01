@@ -25,3 +25,6 @@ application.launch {
 Each `jobs` block binds a queue to the handlers it may execute and optionally records their history.
 Several blocks may use the same queue, each with its own concurrency and history. The plugin exposes
 the running instance through `application.workers`.
+
+A worker failure that escapes job execution is logged and stops the application so that the host can
+restart the process. A failing job handler stays isolated to that execution.

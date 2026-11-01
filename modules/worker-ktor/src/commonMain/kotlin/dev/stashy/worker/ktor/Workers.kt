@@ -3,8 +3,7 @@ package dev.stashy.worker.ktor
 import dev.stashy.worker.Worker
 import io.ktor.server.application.*
 import io.ktor.util.*
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 
 private val WorkerKey: AttributeKey<Worker> = AttributeKey("Worker")
 
@@ -48,15 +47,15 @@ public val Workers: ApplicationPlugin<WorkersConfig> =
         application.attributes.put(WorkerKey, worker)
 
         application.monitor.subscribe(ApplicationStarted) {
-            application.launch {
-                try {
-                    worker.start(application)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Throwable) {
-                    application.log.error("Could not start the worker", error)
-                    throw error
-                }
+            val workerScope = CoroutineScope(
+                application.coroutineContext + CoroutineExceptionHandler { _, error ->
+                    application.stopAfterWorkerFailure(error)
+                },
+            )
+            try {
+                worker.start(workerScope)
+            } catch (error: Throwable) {
+                application.stopAfterWorkerFailure(error)
             }
         }
 
@@ -64,3 +63,11 @@ public val Workers: ApplicationPlugin<WorkersConfig> =
             worker.requestStop()
         }
     }
+
+private fun Application.stopAfterWorkerFailure(error: Throwable) {
+    log.error("Worker failed; stopping the application", error)
+    if (coroutineContext[Job]?.isActive != true) return
+    CoroutineScope(Dispatchers.Default).launch {
+        engine.stopSuspend()
+    }
+}

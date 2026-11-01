@@ -58,14 +58,24 @@ public class Worker internal constructor(
 
     private val runJob = atomic<CoroutineJob?>(null)
 
-    public fun start(scope: CoroutineScope): Unit {
+    /**
+     * Starts polling in [scope] and returns the job that runs the worker.
+     */
+    public fun start(scope: CoroutineScope): CoroutineJob {
+        val failure = CompletableDeferred<Throwable>()
         val executionScope = CoroutineScope(
-            scope.coroutineContext.minusKey(CoroutineJob) + SupervisorJob() + config.dispatcher,
+            scope.coroutineContext.minusKey(CoroutineJob) +
+                    SupervisorJob() +
+                    config.dispatcher +
+                    CoroutineExceptionHandler { _, cause -> failure.complete(cause) },
         )
 
         val job = scope.launch(config.dispatcher, start = CoroutineStart.LAZY) {
             try {
-                runLoop(executionScope)
+                coroutineScope {
+                    launch { runLoop(executionScope) }
+                    throw failure.await()
+                }
             } finally {
                 withContext(NonCancellable) {
                     shutdown(executionScope)
@@ -77,6 +87,7 @@ public class Worker internal constructor(
             error("Worker is already started")
         }
         job.start()
+        return job
     }
 
     public fun requestStop(): Unit {

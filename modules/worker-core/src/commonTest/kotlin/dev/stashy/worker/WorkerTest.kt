@@ -10,8 +10,12 @@ import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import dev.stashy.worker.store.memory.InMemoryJobHistory
 import dev.stashy.worker.store.memory.InMemoryJobQueue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
@@ -546,6 +550,64 @@ class WorkerTest {
         assertEquals(2, attempts)
         assertNull(store.get(Job.Id("job")))
         worker.stop()
+    }
+
+    @Test
+    fun `worker fails when a queue throws an error`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = object : JobQueue<String> by InMemoryJobQueue(TestJson) {
+            override suspend fun claim(
+                request: JobQueue.ClaimRequest,
+                limit: Int,
+            ): List<JobQueue.Claimed<String>> = throw AssertionError("boom")
+        }
+        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+        val failure = CompletableDeferred<Throwable?>()
+
+        val workerJob = worker.start(scope())
+        workerJob.invokeOnCompletion { failure.complete(it) }
+        runCurrent()
+
+        assertTrue(workerJob.isCancelled)
+        assertTrue(failure.await() is AssertionError)
+    }
+
+    @Test
+    fun `worker fails when an execution throws an error`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val worker = worker(clock, store) {
+            prepared<Unit> { _, _ ->
+                resource { Unit }.onDispose { throw AssertionError("boom") }
+                handler { }
+            }
+        }
+        val failure = CompletableDeferred<Throwable?>()
+
+        worker.schedule("job", Unit) { once(clock.now()) }
+        val workerJob = worker.start(scope())
+        workerJob.invokeOnCompletion { failure.complete(it) }
+        runCurrent()
+
+        assertTrue(workerJob.isCancelled)
+        assertTrue(failure.await() is AssertionError)
+    }
+
+    @Test
+    fun `stopping the worker does not fail its job`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val worker = worker(clock, store) { job<Unit> { _, _ -> } }
+        val failure = CompletableDeferred<Throwable?>()
+
+        val workerJob = worker.start(scope())
+        workerJob.invokeOnCompletion { failure.complete(it) }
+        runCurrent()
+        worker.requestStop()
+        runCurrent()
+
+        assertTrue(workerJob.isCancelled)
+        assertTrue(failure.await() is CancellationException)
     }
 
     @Test
@@ -1165,6 +1227,12 @@ class WorkerTest {
         )
         worker.stop()
     }
+
+    private fun TestScope.scope(): CoroutineScope = CoroutineScope(
+        SupervisorJob() +
+            StandardTestDispatcher(testScheduler) +
+            CoroutineExceptionHandler { _, _ -> },
+    )
 
     private fun TestScope.worker(
         clock: Clock,

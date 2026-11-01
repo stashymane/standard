@@ -3,7 +3,10 @@ package dev.stashy.worker.ktor
 import dev.stashy.worker.WorkerLogger
 import io.ktor.util.logging.Logger
 
-internal class KtorWorkerLogger(private val logger: Logger) : WorkerLogger {
+/**
+ * A [WorkerLogger] that forwards worker diagnostics to a Ktor [Logger].
+ */
+public class KtorWorkerLogger(private val logger: Logger) : WorkerLogger {
     override fun log(level: WorkerLogger.Level, message: String, throwable: Throwable?): Unit =
         when (level) {
             WorkerLogger.Level.DEBUG -> if (throwable == null) logger.debug(message) else logger.debug(message, throwable)

@@ -1,13 +1,8 @@
 package dev.stashy.worker.ktor
 
 import dev.stashy.worker.Worker
-import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationPlugin
-import io.ktor.server.application.ApplicationStarted
-import io.ktor.server.application.ApplicationStopping
-import io.ktor.server.application.createApplicationPlugin
-import io.ktor.server.application.log
-import io.ktor.util.AttributeKey
+import io.ktor.server.application.*
+import io.ktor.util.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -47,7 +42,9 @@ public val Application.workers: Worker
 public val Workers: ApplicationPlugin<WorkersConfig> =
     createApplicationPlugin("Workers", ::WorkersConfig) {
         val config = pluginConfig
-        val worker = config.createWorker()
+        val worker = config.createWorker(
+            defaultLogger = { KtorWorkerLogger(application.log) }
+        )
         application.attributes.put(WorkerKey, worker)
 
         application.monitor.subscribe(ApplicationStarted) {

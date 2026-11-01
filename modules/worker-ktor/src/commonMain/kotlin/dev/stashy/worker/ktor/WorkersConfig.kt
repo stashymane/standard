@@ -1,8 +1,9 @@
 package dev.stashy.worker.ktor
 
-import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
+import dev.stashy.worker.WorkerLogger
+import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import kotlin.uuid.Uuid
@@ -43,12 +44,16 @@ public class WorkersConfig {
         configBlocks += configure
     }
 
-    internal fun createWorker(): Worker = Worker(id = id) {
+    internal fun createWorker(
+        defaultLogger: () -> WorkerLogger
+    ): Worker = Worker(id = id) {
         jobBlocks.forEach { block ->
             jobs(block.queue, block.history) { block.configure(this) }
         }
         config {
             configBlocks.forEach { block -> block(this) }
+
+            if (logger === WorkerLogger.None) logger = defaultLogger()
         }
     }
 

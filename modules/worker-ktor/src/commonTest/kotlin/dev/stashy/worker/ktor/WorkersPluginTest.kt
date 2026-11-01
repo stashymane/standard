@@ -1,5 +1,6 @@
 package dev.stashy.worker.ktor
 
+import dev.stashy.worker.WorkerLogger
 import dev.stashy.worker.store.memory.InMemoryJobHistory
 import dev.stashy.worker.store.memory.InMemoryJobQueue
 import io.ktor.server.application.install
@@ -136,6 +137,56 @@ class WorkersPluginTest {
         assertEquals(listOf("kotlin.String"), localHistory.list().map { it.handlerId })
         assertTrue(shared.list().isEmpty())
         assertTrue(local.list().isEmpty())
+    }
+
+    @Test
+    fun `plugin logs through the configured logger`() = testApplication {
+        val logged = CompletableDeferred<String>()
+
+        application {
+            install(Workers) {
+                jobs(InMemoryJobQueue(testFormat)) {
+                    job<Unit> { _, _ -> error("boom") }
+                }
+                config {
+                    pollInterval = 10.milliseconds
+                    prepareWindow = 20.milliseconds
+                    leaseDuration = 1.seconds
+                    heartbeatInterval = 300.milliseconds
+                    shutdownGracePeriod = 100.milliseconds
+                    logger = WorkerLogger { level, message, _ ->
+                        if (level == WorkerLogger.Level.ERROR) logged.complete(message)
+                    }
+                }
+            }
+
+            launch {
+                workers.schedule("failing-job", Unit) {
+                    once(Clock.System.now())
+                }
+            }
+        }
+
+        startApplication()
+
+        assertTrue(withTimeout(5.seconds) { logged.await() }.contains("failed"))
+    }
+
+    @Test
+    fun `default logger is created only when no logger is configured`() {
+        var created = 0
+        val factory = {
+            created += 1
+            WorkerLogger.None
+        }
+
+        WorkersConfig().apply {
+            config { logger = WorkerLogger { _, _, _ -> } }
+        }.createWorker(factory)
+        assertEquals(0, created)
+
+        WorkersConfig().createWorker(factory)
+        assertEquals(1, created)
     }
 
     @Test

@@ -37,13 +37,22 @@ public class InMemoryJobQueue<P : Any>(
 
     override suspend fun get(id: Job.Id): QueuedJob<P>? = jobs.value[id]
 
-    override suspend fun list(filter: JobQueue.Filter): List<QueuedJob<P>> = jobs.value.values
-        .asSequence()
-        .filter { job -> filter.statuses == null || job.status in filter.statuses }
-        .filter { job -> filter.handlerId == null || job.definition.handlerId == filter.handlerId }
-        .sortedBy { it.definition.id.value }
-        .take(filter.limit)
-        .toList()
+    override suspend fun list(
+        statuses: Set<QueuedJob.Status>?,
+        handlerId: String?,
+        limit: Int?,
+    ): List<QueuedJob<P>> {
+        require(statuses == null || statuses.isNotEmpty()) { "statuses must be null or non-empty" }
+        require(handlerId == null || handlerId.isNotBlank()) { "handlerId must be null or non-blank" }
+        require(limit == null || limit >= 1) { "limit must be at least 1" }
+        return jobs.value.values
+            .asSequence()
+            .filter { job -> statuses == null || job.status in statuses }
+            .filter { job -> handlerId == null || job.definition.handlerId == handlerId }
+            .sortedByDescending { it.scheduledAt }
+            .take(limit ?: Int.MAX_VALUE)
+            .toList()
+    }
 
     override suspend fun create(job: Job, payload: P, scheduledAt: Instant): Boolean {
         val entry = QueuedJob(

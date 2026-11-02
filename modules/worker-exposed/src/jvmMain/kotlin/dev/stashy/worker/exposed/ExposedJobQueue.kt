@@ -58,22 +58,23 @@ public class ExposedJobQueue(
             ?.toJob(format)
     }
 
-    override suspend fun list(filter: JobQueue.Filter): List<QueuedJob<String>> = transaction {
-        val statuses = filter.statuses
-        val handlerId = filter.handlerId
+    override suspend fun list(
+        statuses: Set<QueuedJob.Status>?,
+        handlerId: String?,
+        limit: Int?,
+    ): List<QueuedJob<String>> = transaction {
+        require(statuses == null || statuses.isNotEmpty()) { "statuses must be null or non-empty" }
+        require(handlerId == null || handlerId.isNotBlank()) { "handlerId must be null or non-blank" }
+        require(limit == null || limit >= 1) { "limit must be at least 1" }
         WorkerJobsTable.selectAll()
             .where {
-                var condition: Op<Boolean> = Op.TRUE
-                if (statuses != null) {
-                    condition = condition and (WorkerJobsTable.status inList statuses)
-                }
-                if (handlerId != null) {
-                    condition = condition and (WorkerJobsTable.handlerId eq handlerId)
-                }
-                condition
+                buildList {
+                    statuses?.let { add(WorkerJobsTable.status inList it) }
+                    handlerId?.let { add(WorkerJobsTable.handlerId eq it) }
+                }.ifEmpty { listOf(Op.TRUE) }.compoundAnd()
             }
-            .orderBy(WorkerJobsTable.id to SortOrder.ASC)
-            .limit(filter.limit)
+            .orderBy(WorkerJobsTable.scheduledAt to SortOrder.DESC)
+            .let { query -> if (limit == null) query else query.limit(limit) }
             .map { it.toJob(format) }
     }
 

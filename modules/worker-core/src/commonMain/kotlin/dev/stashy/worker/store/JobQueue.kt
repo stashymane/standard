@@ -94,27 +94,17 @@ public interface JobQueue<P : Any> {
         CANCELLATION_REQUESTED,
     }
 
-    /**
-     * Criteria for listing jobs. Null fields match everything.
-     */
-    public data class Filter(
-        public val statuses: Set<QueuedJob.Status>? = null,
-        public val handlerId: String? = null,
-        public val limit: Int = Int.MAX_VALUE,
-    ) {
-        init {
-            require(statuses == null || statuses.isNotEmpty()) { "statuses must be null or non-empty" }
-            require(handlerId == null || handlerId.isNotBlank()) { "handlerId must be null or non-blank" }
-            require(limit >= 1) { "limit must be at least 1" }
-        }
-    }
-
     public suspend fun get(id: Job.Id): QueuedJob<P>?
 
     /**
-     * Lists jobs matching [filter], ordered by job id, at most [Filter.limit] entries.
+     * Lists jobs matching the given criteria.
+     * @return a list of queued jobs sorted by [QueuedJob.scheduledAt], newest first.
      */
-    public suspend fun list(filter: Filter = Filter()): List<QueuedJob<P>>
+    public suspend fun list(
+        statuses: Set<QueuedJob.Status>? = null,
+        handlerId: String? = null,
+        limit: Int? = null,
+    ): List<QueuedJob<P>>
 
     /**
      * Creates a pending job at [scheduledAt] with the encoded [payload]. Returns false when the id

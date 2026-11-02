@@ -19,7 +19,7 @@ class InMemoryJobHistoryTest {
     }
 
     @Test
-    fun `lists entries ordered by finished time`() = runTest {
+    fun `lists entries newest first`() = runTest {
         val history = InMemoryJobHistory()
         val later = entry(attempt = 2, finishedAt = now + 2.seconds)
         val earlier = entry(attempt = 1, finishedAt = now + 1.seconds)
@@ -27,7 +27,7 @@ class InMemoryJobHistoryTest {
         history.record(later)
         history.record(earlier)
 
-        assertEquals(listOf(earlier, later), history.list())
+        assertEquals(listOf(later, earlier), history.list())
     }
 
     @Test
@@ -39,10 +39,10 @@ class InMemoryJobHistoryTest {
 
         listOf(first, second, other).forEach { history.record(it) }
 
-        assertEquals(listOf(first, second), history.list(JobHistory.Filter(jobId = jobId)))
-        assertEquals(listOf(other), history.list(JobHistory.Filter(handlerId = "other-handler")))
-        assertEquals(listOf(first), history.list(JobHistory.Filter(status = JobHistory.Status.FAILED)))
-        assertEquals(listOf(first), history.list(JobHistory.Filter(limit = 1)))
+        assertEquals(listOf(second, first), history.list(jobId = jobId))
+        assertEquals(listOf(other), history.list(handlerId = "other-handler"))
+        assertEquals(listOf(first), history.list(status = JobHistory.Status.FAILED))
+        assertEquals(listOf(second), history.list(limit = 1))
     }
 
     @Test
@@ -56,7 +56,7 @@ class InMemoryJobHistoryTest {
 
         history.clean(now + 2.seconds)
 
-        assertEquals(listOf(boundary, later), history.list())
+        assertEquals(listOf(later, boundary), history.list())
     }
 
     private fun entry(

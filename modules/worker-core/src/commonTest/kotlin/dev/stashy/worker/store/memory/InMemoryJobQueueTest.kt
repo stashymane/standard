@@ -99,23 +99,28 @@ class InMemoryJobQueueTest {
     fun `list filters by status and handler and applies the limit`() = runTest {
         val queue = InMemoryJobQueue(TestJson)
         queue.create(definition("one"), Unit, serializer(), now)
-        queue.create(definition("two"), Unit, serializer(), now)
-        queue.create(definition("other").copy(handlerId = "other"), Unit, serializer(), now)
+        queue.create(definition("two", Schedule.Once(now + 1.seconds)), Unit, serializer(), now + 1.seconds)
+        queue.create(
+            definition("other", Schedule.Once(now + 2.seconds)).copy(handlerId = "other"),
+            Unit,
+            serializer(),
+            now + 2.seconds,
+        )
         queue.claim(request(now, lease = 1.minutes))
 
         assertEquals(
-            listOf("one", "other", "two"),
+            listOf("other", "two", "one"),
             queue.list().map { it.definition.id.value },
         )
         assertEquals(
             listOf("one"),
-            queue.list(JobQueue.Filter(statuses = setOf(QueuedJob.Status.RUNNING))).map { it.definition.id.value },
+            queue.list(statuses = setOf(QueuedJob.Status.RUNNING)).map { it.definition.id.value },
         )
         assertEquals(
             listOf("other"),
-            queue.list(JobQueue.Filter(handlerId = "other")).map { it.definition.id.value },
+            queue.list(handlerId = "other").map { it.definition.id.value },
         )
-        assertEquals(2, queue.list(JobQueue.Filter(limit = 2)).size)
+        assertEquals(2, queue.list(limit = 2).size)
     }
 
     @Test

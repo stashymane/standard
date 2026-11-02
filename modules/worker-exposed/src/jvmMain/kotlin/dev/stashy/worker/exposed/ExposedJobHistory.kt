@@ -1,5 +1,6 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.job.Job
 import dev.stashy.worker.store.JobHistory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -37,18 +38,25 @@ public class ExposedJobHistory(
         }
     }
 
-    override suspend fun list(filter: JobHistory.Filter): List<JobHistory.Entry> = transaction {
+    override suspend fun list(
+        jobId: Job.Id?,
+        handlerId: String?,
+        status: JobHistory.Status?,
+        limit: Int?,
+    ): List<JobHistory.Entry> = transaction {
+        require(handlerId == null || handlerId.isNotBlank()) { "handlerId must be null or non-blank" }
+        require(limit == null || limit >= 1) { "limit must be at least 1" }
         WorkerJobHistoryTable.selectAll()
             .where {
-                var condition: Op<Boolean> = Op.TRUE
-                filter.jobId?.let { condition = condition and (WorkerJobHistoryTable.jobId eq it.value) }
-                filter.handlerId?.let { condition = condition and (WorkerJobHistoryTable.handlerId eq it) }
-                filter.status?.let { condition = condition and (WorkerJobHistoryTable.status eq it) }
-                condition
+                buildList {
+                    jobId?.let { add(WorkerJobHistoryTable.jobId eq it.value) }
+                    handlerId?.let { add(WorkerJobHistoryTable.handlerId eq it) }
+                    status?.let { add(WorkerJobHistoryTable.status eq it) }
+                }.ifEmpty { listOf(Op.TRUE) }.compoundAnd()
             }
-            .orderBy(WorkerJobHistoryTable.finishedAt to SortOrder.ASC)
-            .limit(filter.limit)
-            .map { it.toEntry() }
+            .orderBy(WorkerJobHistoryTable.finishedAt to SortOrder.DESC)
+            .let { query -> if (limit == null) query else query.limit(limit) }
+            .map(ResultRow::toEntry)
     }
 
     private suspend fun <T> transaction(block: suspend JdbcTransaction.() -> T): T =

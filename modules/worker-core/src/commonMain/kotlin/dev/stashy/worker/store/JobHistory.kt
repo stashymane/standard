@@ -40,24 +40,18 @@ public interface JobHistory {
     }
 
     /**
-     * Criteria for reading history. Null fields match everything.
-     */
-    public data class Filter(
-        public val jobId: Job.Id? = null,
-        public val handlerId: String? = null,
-        public val status: Status? = null,
-        public val limit: Int = Int.MAX_VALUE,
-    ) {
-        init {
-            require(handlerId == null || handlerId.isNotBlank()) { "handlerId must be null or non-blank" }
-            require(limit >= 1) { "limit must be at least 1" }
-        }
-    }
-
-    /**
-     * History that can be read back, ordered by [Entry.finishedAt].
+     * History that can be read back.
      */
     public interface Readable : JobHistory {
-        public suspend fun list(filter: Filter = Filter()): List<Entry>
+        /**
+         * Lists entries matching the given criteria.
+         * @return a list of history entries, sorted by newest to oldest
+         */
+        public suspend fun list(
+            jobId: Job.Id? = null,
+            handlerId: String? = null,
+            status: Status? = null,
+            limit: Int? = null,
+        ): List<Entry>
     }
 }

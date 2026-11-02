@@ -111,18 +111,18 @@ class ExposedJobQueueTest {
             assertNotNull(fixture.queue.claim(request(now)))
 
             assertEquals(
-                listOf("one", "other", "two"),
+                listOf("other", "two", "one"),
                 fixture.queue.list().map { it.definition.id.value },
             )
             assertEquals(
                 listOf("one"),
-                fixture.queue.list(JobQueue.Filter(statuses = setOf(QueuedJob.Status.RUNNING))).map { it.definition.id.value },
+                fixture.queue.list(statuses = setOf(QueuedJob.Status.RUNNING)).map { it.definition.id.value },
             )
             assertEquals(
                 listOf("other"),
-                fixture.queue.list(JobQueue.Filter(handlerId = "other")).map { it.definition.id.value },
+                fixture.queue.list(handlerId = "other").map { it.definition.id.value },
             )
-            assertEquals(2, fixture.queue.list(JobQueue.Filter(limit = 2)).size)
+            assertEquals(2, fixture.queue.list(limit = 2).size)
         }
     }
 

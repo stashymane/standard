@@ -32,7 +32,7 @@ class ExposedJobHistoryTest {
     }
 
     @Test
-    fun `lists entries ordered by finished time`() = runTest {
+    fun `lists entries newest first`() = runTest {
         val history = h2History()
         val later = entry(attempt = 2, finishedAt = now + 2.seconds)
         val earlier = entry(attempt = 1, finishedAt = now + 1.seconds)
@@ -40,7 +40,7 @@ class ExposedJobHistoryTest {
         history.record(later)
         history.record(earlier)
 
-        assertEquals(listOf(earlier, later), history.list())
+        assertEquals(listOf(later, earlier), history.list())
     }
 
     @Test
@@ -52,10 +52,10 @@ class ExposedJobHistoryTest {
 
         listOf(first, second, other).forEach { history.record(it) }
 
-        assertEquals(listOf(first, second), history.list(JobHistory.Filter(jobId = jobId)))
-        assertEquals(listOf(other), history.list(JobHistory.Filter(handlerId = "other-handler")))
-        assertEquals(listOf(first), history.list(JobHistory.Filter(status = JobHistory.Status.FAILED)))
-        assertEquals(listOf(first), history.list(JobHistory.Filter(limit = 1)))
+        assertEquals(listOf(second, first), history.list(jobId = jobId))
+        assertEquals(listOf(other), history.list(handlerId = "other-handler"))
+        assertEquals(listOf(first), history.list(status = JobHistory.Status.FAILED))
+        assertEquals(listOf(second), history.list(limit = 1))
     }
 
     @Test
@@ -89,7 +89,7 @@ class ExposedJobHistoryTest {
         val recorded = assertNotNull(history.list().singleOrNull())
         assertEquals(Job.Id("job"), recorded.jobId)
         assertEquals(JobHistory.Status.SUCCEEDED, recorded.status)
-        assertTrue(history.list(JobHistory.Filter(jobId = Job.Id("job"))).isNotEmpty())
+        assertTrue(history.list(jobId = Job.Id("job")).isNotEmpty())
     }
 
     private fun h2History(): ExposedJobHistory {

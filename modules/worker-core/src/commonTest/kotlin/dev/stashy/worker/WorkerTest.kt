@@ -1295,7 +1295,7 @@ class WorkerTest {
         assertEquals(1, runs)
         assertEquals(
             JobHistory.Status.CANCELLED,
-            assertNotNull(history.list().lastOrNull()).status,
+            assertNotNull(history.list().firstOrNull()).status,
         )
         worker.stop()
     }

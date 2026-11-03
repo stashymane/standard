@@ -44,6 +44,7 @@ plugins {
 include(
     "modules:cron",
     "modules:data",
+    "modules:model",
     "modules:navigation",
     "modules:util-time",
     "modules:ui-animation",

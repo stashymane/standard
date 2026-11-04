@@ -1,4 +1,4 @@
-package dev.stashy.worker.exposed
+package dev.stashy.worker.exposed.tables
 
 import dev.stashy.worker.job.QueuedJob
 import org.jetbrains.exposed.v1.core.Column
@@ -8,8 +8,6 @@ import kotlin.time.Instant
 
 /**
  * Persistence layout for queued worker jobs.
- *
- * Create or migrate this table through the application's existing schema management.
  */
 public object WorkerJobsTable : Table("worker_jobs") {
     public val id: Column<String> = varchar("id", 255)

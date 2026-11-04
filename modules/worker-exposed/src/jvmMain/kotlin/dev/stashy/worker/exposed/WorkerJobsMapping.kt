@@ -1,12 +1,11 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.exposed.tables.WorkerJobsTable
 import dev.stashy.worker.job.Job
-import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.job.QueuedJob
-import dev.stashy.worker.job.RetryPolicy
-import dev.stashy.worker.schedule.Schedule
 import kotlinx.serialization.StringFormat
-import kotlinx.serialization.serializer
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
@@ -26,10 +25,10 @@ internal fun ResultRow.toJob(format: StringFormat): QueuedJob<String> {
         definition = Job(
             id = Job.Id(this[WorkerJobsTable.id]),
             handlerId = this[WorkerJobsTable.handlerId],
-            schedule = format.decodeSchedule(this[WorkerJobsTable.schedule]),
+            schedule = format.decodeFromString(this[WorkerJobsTable.schedule]),
             enabled = this[WorkerJobsTable.enabled],
-            retry = format.decodeRetry(this[WorkerJobsTable.retryPolicy]),
-            latePolicy = format.decodeLatePolicy(this[WorkerJobsTable.latePolicy]),
+            retry = format.decodeFromString(this[WorkerJobsTable.retryPolicy]),
+            latePolicy = format.decodeFromString(this[WorkerJobsTable.latePolicy]),
         ),
         payload = this[WorkerJobsTable.payload],
         status = status,
@@ -48,10 +47,10 @@ internal fun UpdateBuilder<*>.setJob(
 ) {
     this[WorkerJobsTable.handlerId] = job.handlerId
     this[WorkerJobsTable.payload] = payload
-    this[WorkerJobsTable.schedule] = format.encodeSchedule(job.schedule)
+    this[WorkerJobsTable.schedule] = format.encodeToString(job.schedule)
     this[WorkerJobsTable.enabled] = job.enabled
-    this[WorkerJobsTable.retryPolicy] = format.encodeRetry(job.retry)
-    this[WorkerJobsTable.latePolicy] = format.encodeLatePolicy(job.latePolicy)
+    this[WorkerJobsTable.retryPolicy] = format.encodeToString(job.retry)
+    this[WorkerJobsTable.latePolicy] = format.encodeToString(job.latePolicy)
 }
 
 internal fun UpdateBuilder<*>.setJobReset(
@@ -103,21 +102,3 @@ private fun UpdateBuilder<*>.clearLock() {
     this[WorkerJobsTable.lockToken] = null
     this[WorkerJobsTable.leaseExpiresAt] = null
 }
-
-private fun StringFormat.encodeSchedule(schedule: Schedule): String =
-    encodeToString(serializer<Schedule>(), schedule)
-
-private fun StringFormat.decodeSchedule(value: String): Schedule =
-    decodeFromString(serializer<Schedule>(), value)
-
-private fun StringFormat.encodeRetry(retry: RetryPolicy): String =
-    encodeToString(serializer<RetryPolicy>(), retry)
-
-private fun StringFormat.decodeRetry(value: String): RetryPolicy =
-    decodeFromString(serializer<RetryPolicy>(), value)
-
-private fun StringFormat.encodeLatePolicy(policy: LateExecutionPolicy): String =
-    encodeToString(serializer<LateExecutionPolicy>(), policy)
-
-private fun StringFormat.decodeLatePolicy(value: String): LateExecutionPolicy =
-    decodeFromString(serializer<LateExecutionPolicy>(), value)

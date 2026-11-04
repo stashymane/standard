@@ -44,8 +44,7 @@ public interface JobHistory {
      */
     public interface Readable : JobHistory {
         /**
-         * Lists entries matching the given criteria.
-         * @return a list of history entries, sorted by newest to oldest
+         * @return a list of history entries matching the criteria, sorted by newest to oldest
          */
         public suspend fun list(
             jobId: Job.Id? = null,

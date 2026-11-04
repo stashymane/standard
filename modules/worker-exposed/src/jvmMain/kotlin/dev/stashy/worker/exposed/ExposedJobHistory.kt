@@ -1,25 +1,22 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.exposed.tables.WorkerJobHistoryTable
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.store.JobHistory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
-import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 
 /**
  * [JobHistory.Readable] backed by an existing Exposed JDBC [database].
- *
- * The history owns no connections and does not create or migrate [WorkerJobHistoryTable].
  */
 public class ExposedJobHistory(
     private val database: Database,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : JobHistory.Readable {
     /**
-     * Creates [WorkerJobHistoryTable] when the application does not manage schema elsewhere.
+     * Creates [WorkerJobHistoryTable].
      */
     public suspend fun createSchema(): Unit = transaction {
         SchemaUtils.create(WorkerJobHistoryTable)
@@ -60,7 +57,5 @@ public class ExposedJobHistory(
     }
 
     private suspend fun <T> transaction(block: suspend JdbcTransaction.() -> T): T =
-        withContext(dispatcher) {
-            suspendTransaction(db = database) { block() }
-        }
+        database.transaction(dispatcher, block)
 }

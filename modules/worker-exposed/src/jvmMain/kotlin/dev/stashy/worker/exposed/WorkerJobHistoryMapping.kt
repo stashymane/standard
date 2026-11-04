@@ -1,5 +1,6 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.exposed.tables.WorkerJobHistoryTable
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.store.JobHistory
 import org.jetbrains.exposed.v1.core.ResultRow

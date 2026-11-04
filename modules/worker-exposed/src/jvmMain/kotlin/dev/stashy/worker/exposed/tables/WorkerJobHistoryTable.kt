@@ -1,4 +1,4 @@
-package dev.stashy.worker.exposed
+package dev.stashy.worker.exposed.tables
 
 import dev.stashy.worker.store.JobHistory
 import org.jetbrains.exposed.v1.core.Column

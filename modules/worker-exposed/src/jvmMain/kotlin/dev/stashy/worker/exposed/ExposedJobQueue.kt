@@ -1,5 +1,6 @@
 package dev.stashy.worker.exposed
 
+import dev.stashy.worker.exposed.tables.WorkerJobsTable
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.store.ConfigCodec
@@ -7,7 +8,6 @@ import dev.stashy.worker.store.JobQueue
 import dev.stashy.worker.store.StringConfigCodec
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.StringFormat
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.vendors.ForUpdateOption
@@ -16,7 +16,6 @@ import org.jetbrains.exposed.v1.core.vendors.OracleDialect
 import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.*
-import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import kotlin.time.Duration
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
@@ -24,7 +23,7 @@ import kotlin.uuid.Uuid
 /**
  * [JobQueue] backed by an existing Exposed JDBC [database].
  *
- * The queue owns no connections and does not create or migrate [WorkerJobsTable].
+ * The queue owns no connections and does not create or migrate [dev.stashy.worker.exposed.tables.WorkerJobsTable].
  *
  * On PostgreSQL, MySQL 8+/MariaDB 10.6+, and Oracle, claim candidates are selected with
  * `FOR UPDATE SKIP LOCKED` so concurrent workers claim disjoint jobs. Other dialects fall back to
@@ -45,7 +44,7 @@ public class ExposedJobQueue(
     }
 
     /**
-     * Creates [WorkerJobsTable] when the application does not manage schema elsewhere.
+     * Creates [dev.stashy.worker.exposed.tables.WorkerJobsTable] when the application does not manage schema elsewhere.
      */
     public suspend fun createSchema(): Unit = transaction {
         SchemaUtils.create(WorkerJobsTable)
@@ -132,44 +131,45 @@ public class ExposedJobQueue(
         } > 0
     }
 
-    override suspend fun claim(request: JobQueue.ClaimRequest, limit: Int): List<JobQueue.Claimed<String>> = transaction {
-        require(limit >= 1) { "limit must be at least 1" }
-        val horizon = request.now + request.prepareWindow
-        val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
-            .where {
-                (WorkerJobsTable.status eq QueuedJob.Status.PENDING) and
-                        (WorkerJobsTable.enabled eq true) and
-                        (WorkerJobsTable.handlerId inList request.supportedHandlerIds) and
-                        (WorkerJobsTable.nextRunAt lessEq horizon)
+    override suspend fun claim(request: JobQueue.ClaimRequest, limit: Int): List<JobQueue.Claimed<String>> =
+        transaction {
+            require(limit >= 1) { "limit must be at least 1" }
+            val horizon = request.now + request.prepareWindow
+            val candidateIds = WorkerJobsTable.select(WorkerJobsTable.id)
+                .where {
+                    (WorkerJobsTable.status eq QueuedJob.Status.PENDING) and
+                            (WorkerJobsTable.enabled eq true) and
+                            (WorkerJobsTable.handlerId inList request.supportedHandlerIds) and
+                            (WorkerJobsTable.nextRunAt lessEq horizon)
+                }
+                .orderBy(WorkerJobsTable.nextRunAt to SortOrder.ASC)
+                .limit(limit)
+                .let { query -> claimLockOption?.let(query::forUpdate) ?: query }
+                .map { it[WorkerJobsTable.id] }
+
+            candidateIds.mapNotNull { id ->
+                val token = Uuid.random().toString()
+                val leaseUntil = request.now + request.lease
+
+                val updated = WorkerJobsTable.update({
+                    (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq QueuedJob.Status.PENDING)
+                }) {
+                    it.setClaim(request.workerId, token, leaseUntil)
+                }
+                if (updated != 1) return@mapNotNull null
+
+                val job = WorkerJobsTable.selectAll()
+                    .where { WorkerJobsTable.id eq id }
+                    .single()
+                    .toJob(format)
+                JobQueue.Claimed(
+                    job = job,
+                    attempt = job.attempt,
+                    scheduledAt = job.scheduledAt ?: job.nextRun ?: request.now,
+                    recovered = false,
+                )
             }
-            .orderBy(WorkerJobsTable.nextRunAt to SortOrder.ASC)
-            .limit(limit)
-            .let { query -> claimLockOption?.let(query::forUpdate) ?: query }
-            .map { it[WorkerJobsTable.id] }
-
-        candidateIds.mapNotNull { id ->
-            val token = Uuid.random().toString()
-            val leaseUntil = request.now + request.lease
-
-            val updated = WorkerJobsTable.update({
-                (WorkerJobsTable.id eq id) and (WorkerJobsTable.status eq QueuedJob.Status.PENDING)
-            }) {
-                it.setClaim(request.workerId, token, leaseUntil)
-            }
-            if (updated != 1) return@mapNotNull null
-
-            val job = WorkerJobsTable.selectAll()
-                .where { WorkerJobsTable.id eq id }
-                .single()
-                .toJob(format)
-            JobQueue.Claimed(
-                job = job,
-                attempt = job.attempt,
-                scheduledAt = job.scheduledAt ?: job.nextRun ?: request.now,
-                recovered = false,
-            )
         }
-    }
 
     override suspend fun renew(
         claim: JobQueue.Claimed<String>,
@@ -252,7 +252,7 @@ public class ExposedJobQueue(
                 (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
                 (WorkerJobsTable.lockToken eq claim.lockToken)
 
-    private fun JdbcTransaction.deleteOwned(claim: JobQueue.Claimed<String>): Boolean =
+    private fun deleteOwned(claim: JobQueue.Claimed<String>): Boolean =
         WorkerJobsTable.deleteWhere {
             (WorkerJobsTable.id eq claim.job.definition.id.value) and
                     (WorkerJobsTable.status eq QueuedJob.Status.RUNNING) and
@@ -260,11 +260,9 @@ public class ExposedJobQueue(
         } > 0
 
     private suspend fun <T> transaction(block: suspend JdbcTransaction.() -> T): T =
-        withContext(dispatcher) {
-            suspendTransaction(db = database) { block() }
-        }
+        database.transaction(dispatcher, block)
 
-    private fun JdbcTransaction.exists(id: Job.Id): Boolean =
+    private fun exists(id: Job.Id): Boolean =
         WorkerJobsTable.select(WorkerJobsTable.id)
             .where { WorkerJobsTable.id eq id.value }
             .any()

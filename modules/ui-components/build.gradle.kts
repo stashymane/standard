@@ -7,7 +7,7 @@ plugins {
     alias(composeLibs.plugins.compose)
     alias(androidLibs.plugins.library)
 
-    id("multiplatform.target.jvmDesktop")
+    id("multiplatform.target.jvm")
     id("multiplatform.target.wasmJs.browser")
     id("multiplatform.target.js.browser")
     id("multiplatform.target.androidLibrary")

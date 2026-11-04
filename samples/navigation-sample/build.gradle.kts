@@ -7,7 +7,7 @@ plugins {
     alias(composeLibs.plugins.compose)
     alias(androidLibs.plugins.library)
 
-    id("multiplatform.target.jvmDesktop")
+    id("multiplatform.target.jvm")
     id("multiplatform.target.wasmJs.browser")
     id("multiplatform.target.js.browser")
     id("multiplatform.target.androidLibrary")
@@ -46,7 +46,7 @@ kotlin {
             implementation(ktorLibs.resources)
         }
 
-        desktopMain.dependencies {
+        jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
         }
 

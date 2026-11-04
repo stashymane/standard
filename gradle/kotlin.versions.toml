@@ -11,6 +11,7 @@ atomicfu = "0.33.0"
 [libraries]
 reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlin" }
 test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
+test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 
 serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "serialization" }
 serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }

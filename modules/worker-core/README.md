@@ -205,7 +205,8 @@ Database queues must implement these atomicity rules:
     `codec.decode` turns a claimed job's payload back into its config. `StringConfigCodec` wraps a
     `StringFormat`, while `DirectConfigCodec` stores the config instance itself.
 
-`worker-exposed` provides Exposed-based implementations of this contract and of `JobHistory`.
+`worker-exposed-jdbc` and `worker-exposed-r2dbc` provide Exposed-based implementations of this
+contract and of `JobHistory`, sharing the tables and mappings in `worker-exposed-core`.
 
 `payload`, `schedule`, `retry_policy` and `late_policy` can be stored as text. The queue stores
 payloads as produced by its `codec`; with `StringConfigCodec` the payload is the handler config

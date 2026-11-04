@@ -11,16 +11,20 @@ testResources = "0.16.2"
 
 exposed = "1.6.1"
 h2 = "2.5.252"
+r2dbc-h2 = "1.1.0.RELEASE"
 sqlite = "3.53.4.0"
 
 [libraries]
 colormath-core = { module = "com.github.ajalt.colormath:colormath", version.ref = "colormath" }
 colormath-compose = { module = "com.github.ajalt.colormath:colormath-ext-jetpack-compose", version.ref = "colormath" }
 
+exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 exposed-json = { module = "org.jetbrains.exposed:exposed-json", version.ref = "exposed" }
 exposed-kotlin-datetime = { module = "org.jetbrains.exposed:exposed-kotlin-datetime", version.ref = "exposed" }
+exposed-r2dbc = { module = "org.jetbrains.exposed:exposed-r2dbc", version.ref = "exposed" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
+r2dbc-h2 = { module = "io.r2dbc:r2dbc-h2", version.ref = "r2dbc-h2" }
 sqlite = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 
 kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }

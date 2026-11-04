@@ -52,7 +52,10 @@ include(
     "modules:ui-gradients",
     "modules:ui-responsive",
     "modules:worker-core",
-    "modules:worker-exposed",
+    "modules:worker-exposed-core",
+    "modules:worker-exposed-jdbc",
+    "modules:worker-exposed-r2dbc",
+    "modules:worker-exposed-tests",
     "modules:worker-ktor",
     "samples:navigation-sample",
 )

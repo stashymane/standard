@@ -32,11 +32,18 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Resolve version
+        id: version
+        uses: stashymane/actions/get-version@a4bdc027bd0aa9a31b817f406294bf0070c6ec76
+        with:
+          snapshot: 'true'
+          snapshot-commit-suffix: 'true'
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
       - name: Generate documentation
-        run: ./gradlew :docs:dokkaGenerate
+        run: ./gradlew :docs:dokkaGenerate -Pversion=${{ steps.version.outputs.version }}
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5

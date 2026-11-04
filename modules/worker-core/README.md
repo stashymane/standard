@@ -9,7 +9,7 @@ val worker = Worker(id = "api-1") {
     config {
         defaults { // default values for `job {}` blocks 
             pollInterval = 5.seconds
-            retry = RetryPolicy(maxAttempts = 5, initialDelay = 15.seconds)
+            retry = RetryPolicy.Exponential(maxAttempts = 5, initialDelay = 15.seconds)
         }
     }
 
@@ -38,7 +38,7 @@ worker.start(scope)
 worker.schedule("nightly-email", EmailConfig(...)) {
     cron("0 0 3 ? * * *")
     latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
-    retry = RetryPolicy(maxAttempts = 5, initialDelay = 15.seconds)
+    retry = RetryPolicy.Delayed(maxAttempts = 5, delay = 15.seconds)
 }
 
 worker.enqueue(EmailConfig(...))              // as soon as possible
@@ -178,7 +178,6 @@ job<SendEmail> { _, config ->
 }
 ```
 
-
 ## Queue contract
 
 Database queues must implement these atomicity rules:
@@ -224,6 +223,7 @@ like:
   },
   "enabled": true,
   "retry": {
+    "type": "exponential",
     "maxAttempts": 5,
     "initialDelay": "10s",
     "maxDelay": "10m",

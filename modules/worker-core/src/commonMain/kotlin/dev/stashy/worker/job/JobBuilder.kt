@@ -63,6 +63,6 @@ public class JobBuilder internal constructor(
 public fun defineJob(
     handlerId: String,
     id: Job.Id,
-    defaultRetry: RetryPolicy = RetryPolicy(),
+    defaultRetry: RetryPolicy = RetryPolicy.Exponential(),
     configure: JobBuilder.() -> Unit,
 ): Job = JobBuilder(handlerId, id, defaultRetry).apply(configure).build()

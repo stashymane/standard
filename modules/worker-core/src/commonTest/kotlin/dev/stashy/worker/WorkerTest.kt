@@ -235,7 +235,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
             poll = 1.seconds,
             prepareWindow = 30.seconds,
         ) {
@@ -271,7 +271,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
             poll = 1.seconds,
             prepareWindow = 30.seconds,
         ) {
@@ -306,7 +306,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
                 handler {
@@ -336,6 +336,40 @@ class WorkerTest {
     }
 
     @Test
+    fun `null max attempts retries without limit`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        var attempts = 0
+        val worker = worker(
+            clock = clock,
+            store = store,
+            retry = RetryPolicy.Delayed(maxAttempts = null, delay = 1.seconds),
+        ) {
+            job<Unit> { _, _ ->
+                handler {
+                    attempts++
+                    if (attempts <= 6) error("boom")
+                }
+            }
+        }
+
+        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.start(backgroundScope)
+
+        runCurrent()
+        assertEquals(1, attempts)
+
+        repeat(6) {
+            advanceTimeBy(10.seconds)
+            runCurrent()
+        }
+        assertEquals(7, attempts)
+        assertNull(store.get(Job.Id("job")))
+
+        worker.stop()
+    }
+
+    @Test
     fun `handler errors are retried like exceptions`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
@@ -343,7 +377,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
                 handler {
@@ -414,7 +448,7 @@ class WorkerTest {
 
         worker.schedule("job", Unit) {
             every(20.seconds)
-            retry = RetryPolicy(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
+            retry = RetryPolicy.Exponential(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
         }
         worker.start(backgroundScope)
 
@@ -438,7 +472,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         val history = InMemoryJobHistory()
         val handlerId = serializer<Unit>().descriptor.serialName
-        val retry = RetryPolicy(maxAttempts = 3, initialDelay = 3.seconds, jitter = 0.0)
+        val retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 3.seconds, jitter = 0.0)
         val worker = worker(
             clock = clock,
             store = store,
@@ -518,7 +552,7 @@ class WorkerTest {
             clock = clock,
             store = store,
             history = history,
-            retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
                 handler {
@@ -552,7 +586,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 2, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
                 handler {
@@ -678,7 +712,7 @@ class WorkerTest {
                 id = Job.Id("invalid"),
                 handlerId = serializer<String>().descriptor.serialName,
                 schedule = Schedule.Once(clock.now()),
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 1.seconds, jitter = 0.0),
+                retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 1.seconds, jitter = 0.0),
             ),
             config = 123,
             serializer = serializer(),
@@ -836,7 +870,7 @@ class WorkerTest {
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
                     maxConcurrentJobs = 4
-                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
         }
@@ -896,7 +930,7 @@ class WorkerTest {
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
                     maxConcurrentJobs = 4
-                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
         }
@@ -944,7 +978,7 @@ class WorkerTest {
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
                     maxConcurrentJobs = 4
-                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
         }
@@ -987,7 +1021,7 @@ class WorkerTest {
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
                     maxConcurrentJobs = 1
-                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
         }
@@ -1032,7 +1066,7 @@ class WorkerTest {
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
                     maxConcurrentJobs = 1
-                    retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
         }
@@ -1353,7 +1387,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
                 handler { error("boom") } finalizedBy { outcome -> outcomes += outcome }
@@ -1403,7 +1437,7 @@ class WorkerTest {
         val worker = worker(
             clock = clock,
             store = store,
-            retry = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+            retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
         ) {
             job<Unit> { _, _ ->
                 handler { error("boom") } finalizedBy { outcome -> outcomes += outcome }
@@ -1540,7 +1574,7 @@ class WorkerTest {
 
         worker.schedule("job", Unit) {
             every(20.seconds)
-            retry = RetryPolicy(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
+            retry = RetryPolicy.Exponential(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
         }
         worker.start(backgroundScope)
         advanceTimeBy(21.seconds)
@@ -1653,7 +1687,7 @@ class WorkerTest {
     fun `enqueued jobs use their block's default retry policy`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
-        val retry = RetryPolicy(maxAttempts = 9, initialDelay = 1.seconds, jitter = 0.0)
+        val retry = RetryPolicy.Exponential(maxAttempts = 9, initialDelay = 1.seconds, jitter = 0.0)
         val worker = Worker(id = "worker") {
             jobs(store, config = { this.retry = retry }) {
                 job<Unit> { _, _ -> handler { } }
@@ -1691,7 +1725,7 @@ class WorkerTest {
         clock: Clock,
         store: JobQueue<*>,
         history: JobHistory? = null,
-        retry: RetryPolicy = RetryPolicy(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
+        retry: RetryPolicy = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
         lease: Duration = 1.minutes,
         heartbeat: Duration = 20.seconds,
         poll: Duration = 10.seconds,

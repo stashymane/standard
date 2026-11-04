@@ -16,7 +16,7 @@ public data class Job(
     public val handlerId: String,
     public val schedule: Schedule,
     public val enabled: Boolean = true,
-    public val retry: RetryPolicy = RetryPolicy(),
+    public val retry: RetryPolicy = RetryPolicy.Exponential(),
     public val latePolicy: LateExecutionPolicy = LateExecutionPolicy.Run,
 ) {
     @Serializable

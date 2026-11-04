@@ -41,7 +41,7 @@ class ExposedJobQueueTest {
             val definition = definition(
                 "job",
                 schedule = Schedule.Cron("0 0 3 ? * * *", "UTC"),
-                retry = RetryPolicy(maxAttempts = 3, initialDelay = 2.seconds),
+                retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 2.seconds),
                 latePolicy = LateExecutionPolicy.FailAfter(5.seconds),
             )
 
@@ -333,7 +333,7 @@ class ExposedJobQueueTest {
         id: String,
         handlerId: String = "handler",
         schedule: Schedule = Schedule.Once(now),
-        retry: RetryPolicy = RetryPolicy(),
+        retry: RetryPolicy = RetryPolicy.Exponential(),
         latePolicy: LateExecutionPolicy = LateExecutionPolicy.Run,
     ): Job = Job(
         id = Job.Id(id),

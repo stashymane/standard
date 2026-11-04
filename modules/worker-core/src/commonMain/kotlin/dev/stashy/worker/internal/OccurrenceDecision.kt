@@ -53,7 +53,8 @@ internal sealed interface OccurrenceDecision {
          */
         fun <P : Any> failure(claim: JobQueue.Claimed<P>, now: Instant, error: String): OccurrenceDecision {
             val definition = claim.job.definition
-            if (claim.attempt >= definition.retry.maxAttempts) {
+            val maxAttempts = definition.retry.maxAttempts
+            if (maxAttempts != null && claim.attempt >= maxAttempts) {
                 return terminal(claim, now, "Attempts exhausted: $error")
             }
             val retryAt = now + definition.retry.delayFor(claim.attempt)

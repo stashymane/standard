@@ -49,7 +49,7 @@ public data class JobsConfig(
         public val leaseDuration: Duration = 1.minutes
         public val heartbeatInterval: Duration = 20.seconds
         public const val maxConcurrentJobs: Int = 8
-        public val retry: RetryPolicy = RetryPolicy()
+        public val retry: RetryPolicy = RetryPolicy.Exponential()
     }
 
     internal fun validate() {

@@ -7,4 +7,5 @@ plugins {
     alias(androidLibs.plugins.library) apply false
     alias(androidLibs.plugins.application) apply false
     alias(libs.plugins.mavenPublish) apply false
+    alias(libs.plugins.dokka) apply false
 }

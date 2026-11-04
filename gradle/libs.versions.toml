@@ -3,6 +3,7 @@ jvm = "25"
 jvm-target = "17"
 
 mavenPublish = "0.37.0"
+dokka = "2.2.0"
 
 colormath = "3.7.0"
 
@@ -31,4 +32,5 @@ kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref =
 testResources = { module = "com.goncalossilva:resources", version.ref = "testResources" }
 
 [plugins]
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
 mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

@@ -8,6 +8,8 @@ plugins {
 
     alias(libs.plugins.mavenPublish)
     id("plugins.publish.github")
+    alias(libs.plugins.dokka)
+    id("plugins.dokka")
 }
 
 kotlin {

@@ -2,7 +2,6 @@ package dev.stashy.worker
 
 import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.handler.TerminalOutcome
-import dev.stashy.worker.handler.finalizedBy
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.job.QueuedJob

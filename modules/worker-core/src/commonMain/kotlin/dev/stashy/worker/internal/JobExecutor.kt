@@ -1,12 +1,8 @@
 package dev.stashy.worker.internal
 
-import dev.stashy.worker.JobsConfig
-import dev.stashy.worker.Worker
-import dev.stashy.worker.WorkerConfig
-import dev.stashy.worker.WorkerLogger
+import dev.stashy.worker.*
 import dev.stashy.worker.handler.Handler
 import dev.stashy.worker.handler.JobsRegistry
-import dev.stashy.worker.log
 import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import kotlinx.coroutines.*
@@ -80,7 +76,7 @@ internal class JobExecutor<P : Any>(
                 }
 
                 started.complete(Unit)
-                execution.execute(context)
+                execution.run(context)
                 currentCoroutineContext().ensureActive()
 
                 val finishedAt = workerConfig.clock.now()

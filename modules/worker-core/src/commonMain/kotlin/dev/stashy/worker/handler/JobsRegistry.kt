@@ -3,6 +3,10 @@ package dev.stashy.worker.handler
 import dev.stashy.worker.JobsDsl
 import dev.stashy.worker.internal.HandlerBinding
 import dev.stashy.worker.internal.handlerBinding
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.serializer
 
 /**
  * Registry of the jobs a worker is able to execute.
@@ -14,16 +18,37 @@ import dev.stashy.worker.internal.handlerBinding
 public class JobsRegistry<P : Any> internal constructor(
     private val registeredIds: MutableSet<String> = mutableSetOf(),
 ) {
+    private typealias JobBuilder<C> = suspend JobScope.(Handler.Context, C) -> Handler.Builder
+    
     private val bindings = mutableMapOf<String, HandlerBinding<P>>()
 
     /**
      * Registers a handler whose block runs when the job is claimed.
      */
-    public inline fun <reified C : Any> job(
-        noinline block: suspend JobScope.(Handler.Context, C) -> Handler.Builder,
-    ): Unit {
-        register(dev.stashy.worker.handler.job(block))
-    }
+    public fun <C : Any> job(
+        serializer: KSerializer<C>,
+        block: JobBuilder<C>
+    ): Unit = register(object : Handler<C> {
+        override val configSerializer: KSerializer<C> = serializer
+
+        override suspend fun prepare(context: Handler.Context, config: C): Handler.Prepared {
+            val scope = JobScope()
+            return try {
+                scope.block(context, config).build(cleanup = {
+                    withContext(NonCancellable) { scope.dispose() }
+                })
+            } catch (error: Throwable) {
+                withContext(NonCancellable) { scope.dispose() }
+                throw error
+            }
+        }
+    })
+
+    /**
+     * Registers a handler whose block runs when the job is claimed.
+     */
+    public inline fun <reified C : Any> job(noinline block: JobBuilder<C>): Unit =
+        job(serializer<C>(), block)
 
     public fun <C : Any> register(handler: Handler<C>): Unit {
         val binding = handlerBinding<P, C>(handler)

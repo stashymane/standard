@@ -19,6 +19,15 @@ public class JobScope @PublishedApi internal constructor() : HandlerScope() {
     ): Handler.Builder {
         check(!declared) { "handler {} may only be declared once" }
         declared = true
-        return Handler.Builder(run = { context -> context.block() })
+        return Handler.Builder(run = block)
     }
+
+    /**
+     * Adds a finalizer to this handler.
+     *
+     * The block runs after the job has left the queue, while prepared resources are still available.
+     */
+    public infix fun Handler.Builder.finalizedBy(
+        block: suspend Handler.Context.(TerminalOutcome) -> Unit,
+    ): Handler.Builder = apply { onFinalize = block }
 }

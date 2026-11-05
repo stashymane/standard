@@ -6,6 +6,9 @@ plugins {
 dependencies {
     dokka(projects.modules.cron)
     dokka(projects.modules.data)
+    dokka(projects.modules.exposedCursor)
+    dokka(projects.modules.exposedCursorJdbc)
+    dokka(projects.modules.exposedCursorR2dbc)
     dokka(projects.modules.model)
     dokka(projects.modules.navigation)
     dokka(projects.modules.utilTime)

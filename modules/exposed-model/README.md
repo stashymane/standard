@@ -2,6 +2,18 @@
 
 Exposed support for the `model` module.
 
+## Typed ID tables
+
+```kotlin
+object Events : TypedIdTable<Event>("events") {
+    val name = varchar("name", 32)
+}
+```
+
+`id` is a `Column<Id<Event>>` and the table's primary key.
+
+The ID column can also be declared on a regular table:
+
 ```kotlin
 object Events : Table("events") {
     val id = typedId<Event>("id")

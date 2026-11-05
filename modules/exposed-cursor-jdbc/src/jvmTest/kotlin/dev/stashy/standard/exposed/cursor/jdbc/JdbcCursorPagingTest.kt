@@ -2,7 +2,7 @@ package dev.stashy.standard.exposed.cursor.jdbc
 
 import dev.stashy.standard.exposed.cursor.testing.CursorPagingTest
 import dev.stashy.standard.exposed.cursor.testing.CursorTestTable
-import dev.stashy.standard.exposed.model.idColumn
+import dev.stashy.standard.exposed.model.typedId
 import dev.stashy.standard.model.Id
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.Table
@@ -133,7 +133,7 @@ class JdbcCursorPagingTest : CursorPagingTest() {
 private class IdCursorEntity
 
 private object IdCursorTestTable : Table("id_cursor_test") {
-    val id = idColumn<IdCursorEntity>("id")
+    val id = typedId<IdCursorEntity>("id")
 
     override val primaryKey: PrimaryKey = PrimaryKey(id)
 }

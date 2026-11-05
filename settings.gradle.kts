@@ -49,6 +49,7 @@ include(
     "modules:exposed-cursor-jdbc",
     "modules:exposed-cursor-r2dbc",
     "modules:exposed-cursor-tests",
+    "modules:exposed-model",
     "modules:model",
     "modules:navigation",
     "modules:util-time",

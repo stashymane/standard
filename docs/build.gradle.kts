@@ -10,6 +10,7 @@ dependencies {
     dokka(projects.modules.exposedCursorJdbc)
     dokka(projects.modules.exposedCursorR2dbc)
     dokka(projects.modules.exposedModel)
+    dokka(projects.modules.exposedUtil)
     dokka(projects.modules.model)
     dokka(projects.modules.navigation)
     dokka(projects.modules.utilTime)

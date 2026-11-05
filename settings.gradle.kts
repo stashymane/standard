@@ -50,6 +50,7 @@ include(
     "modules:exposed-cursor-r2dbc",
     "modules:exposed-cursor-tests",
     "modules:exposed-model",
+    "modules:exposed-util",
     "modules:model",
     "modules:navigation",
     "modules:util-time",

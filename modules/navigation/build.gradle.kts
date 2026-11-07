@@ -30,6 +30,10 @@ kotlin {
         binaries.executable()
     }
 
+    js {
+        binaries.executable()
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(ktorLibs.resources)

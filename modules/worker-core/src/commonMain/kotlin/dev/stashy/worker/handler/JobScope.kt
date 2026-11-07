@@ -6,7 +6,7 @@ import dev.stashy.worker.JobsDsl
  * Scope available to `job` blocks while they prepare.
  */
 @JobsDsl
-public class JobScope @PublishedApi internal constructor() : HandlerScope() {
+public class JobScope @PublishedApi internal constructor() : ResourceScope by ResourceScope() {
     private var declared = false
 
     /**

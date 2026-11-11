@@ -1,7 +1,10 @@
 package dev.stashy.data
 
+import dev.stashy.data.source.combine
 import dev.stashy.data.source.map
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
@@ -21,17 +24,30 @@ class DataSourceTest {
     }
 
     @Test
-    fun `caching stores successful results`() = runTest {
+    fun `plain source state emits loading then success`() = runTest {
         var loads = 0
         val source = dataSource {
             loads++
             "value"
-        }.cached()
+        }
 
-        assertEquals("value", source.await().getOrThrow())
-        assertEquals("value", source.await().getOrThrow())
-        assertEquals("value", source.getOrNull())
+        assertEquals(
+            listOf(DataSourceState.Loading, DataSourceState.Success("value")),
+            source.state.toList(),
+        )
         assertEquals(1, loads)
+    }
+
+    @Test
+    fun `plain source state emits loading then failure`() = runTest {
+        val source = dataSource<String> {
+            error("boom")
+        }
+
+        val states = source.state.toList()
+        assertEquals(DataSourceState.Loading, states[0])
+        val failure = assertIs<DataSourceState.Failure<String>>(states[1])
+        assertEquals("boom", failure.cause.message)
     }
 
     @Test
@@ -54,187 +70,25 @@ class DataSourceTest {
     }
 
     @Test
-    fun `cached map stores only the final result`() = runTest {
-        var loads = 0
-        var maps = 0
-        val source = dataSource {
-            loads++
-            1
-        }.map {
-            maps++
-            it * 2
-        }.cached()
+    fun `mapping maps state`() = runTest {
+        val source = dataSource { 1 }.map { it * 2 }
 
-        assertEquals(2, source.await().getOrThrow())
-        assertEquals(2, source.await().getOrThrow())
-        assertEquals(2, source.getOrNull())
-        assertEquals(1, loads)
-        assertEquals(1, maps)
+        assertEquals(
+            DataSourceState.Success(2),
+            source.state.first { it is DataSourceState.Success },
+        )
     }
 
     @Test
-    fun `failure clears the in-flight load`() = runTest {
-        var loads = 0
-        val source = dataSource {
-            loads++
-            error("boom")
-        }.cached()
+    fun `combining maps state`() = runTest {
+        val first = dataSource { 1 }
+        val second = dataSource { 2 }
+        val combined = combine(first, second) { a, b -> a + b }
 
-        val first = source.await()
-        assertTrue(first.isFailure)
-        assertEquals("boom", first.exceptionOrNull()?.message)
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-
-        val second = source.await()
-        assertTrue(second.isFailure)
-        assertEquals("boom", second.exceptionOrNull()?.message)
-        assertNull(source.getOrNull())
-        assertEquals(2, loads)
-    }
-
-    @Test
-    fun `awaiting after failure retries and caches`() = runTest {
-        var loads = 0
-        val source = dataSource {
-            loads++
-            if (loads == 1) error("temporary")
-            "ok"
-        }.cached()
-
-        assertTrue(source.await().isFailure)
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-
-        assertEquals("ok", source.await().getOrThrow())
-        assertEquals("ok", source.getOrNull())
-        assertEquals(2, loads)
-
-        assertEquals("ok", source.await().getOrThrow())
-        assertEquals(2, loads)
-    }
-
-    @Test
-    fun `map failure retries without caching`() = runTest {
-        var loads = 0
-        var maps = 0
-        val source = dataSource {
-            loads++
-            "payload"
-        }.map {
-            maps++
-            if (maps == 1) error("parse failed")
-            it.uppercase()
-        }.cached()
-
-        val failed = source.await()
-        assertTrue(failed.isFailure)
-        assertEquals("parse failed", failed.exceptionOrNull()?.message)
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-        assertEquals(1, maps)
-
-        assertEquals("PAYLOAD", source.await().getOrThrow())
-        assertEquals("PAYLOAD", source.getOrNull())
-        assertEquals(2, loads)
-        assertEquals(2, maps)
-    }
-
-    @Test
-    fun `concurrent awaits share one load`() = runTest {
-        var loads = 0
-        val started = CompletableDeferred<Unit>()
-        val gate = CompletableDeferred<Unit>()
-        val source = dataSource {
-            loads++
-            started.complete(Unit)
-            gate.await()
-            "shared"
-        }.cached()
-
-        coroutineScope {
-            val first = async { source.await() }
-            val second = async { source.await() }
-            started.await()
-            yield()
-            gate.complete(Unit)
-            assertEquals("shared", first.await().getOrThrow())
-            assertEquals("shared", second.await().getOrThrow())
-        }
-
-        assertEquals(1, loads)
-        assertEquals("shared", source.getOrNull())
-    }
-
-    @Test
-    fun `preload warms the cache`() = runTest {
-        var loads = 0
-        val source = dataSource {
-            loads++
-            "value"
-        }.cached()
-
-        assertNull(source.getOrNull())
-        source.preload()
-        assertEquals("value", source.getOrNull())
-        assertEquals(1, loads)
-
-        source.preload()
-        assertEquals(1, loads)
-    }
-
-    @Test
-    fun `preload failure is swallowed`() = runTest {
-        var loads = 0
-        val source = dataSource {
-            loads++
-            if (loads == 1) error("preload boom")
-            "ok"
-        }.cached()
-
-        source.preload()
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-
-        assertEquals("ok", source.await().getOrThrow())
-        assertEquals("ok", source.getOrNull())
-        assertEquals(2, loads)
-    }
-
-    @Test
-    fun `concurrent failure propagates and allows retry`() = runTest {
-        var loads = 0
-        val started = CompletableDeferred<Unit>()
-        val gate = CompletableDeferred<Unit>()
-        val source = dataSource {
-            loads++
-            started.complete(Unit)
-            gate.await()
-            if (loads == 1) error("shared failure")
-            "recovered"
-        }.cached()
-
-        coroutineScope {
-            val first = async { source.await() }
-            val second = async { source.await() }
-            started.await()
-            yield()
-            gate.complete(Unit)
-
-            val firstResult = first.await()
-            val secondResult = second.await()
-            assertTrue(firstResult.isFailure)
-            assertTrue(secondResult.isFailure)
-            assertEquals("shared failure", firstResult.exceptionOrNull()?.message)
-            assertEquals("shared failure", secondResult.exceptionOrNull()?.message)
-        }
-
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-
-        assertEquals("recovered", source.await().getOrThrow())
-        assertEquals(2, loads)
-        assertEquals("recovered", source.getOrNull())
+        assertEquals(
+            DataSourceState.Success(3),
+            combined.state.first { it is DataSourceState.Success },
+        )
     }
 
     @Test
@@ -245,64 +99,5 @@ class DataSourceTest {
 
         val cancelled = assertFailsWith<CancellationException> { source.await() }
         assertEquals("gone", cancelled.message)
-    }
-
-    @Test
-    fun `cancellation clears the in-flight load`() = runTest {
-        var loads = 0
-        val started = CompletableDeferred<Unit>()
-        val gate = CompletableDeferred<Unit>()
-        val source = dataSource {
-            loads++
-            if (loads == 1) {
-                started.complete(Unit)
-                gate.await()
-            }
-            "ok"
-        }.cached()
-
-        val inFlight = async { source.await() }
-        started.await()
-        inFlight.cancel(CancellationException("stop"))
-        assertFailsWith<CancellationException> { inFlight.await() }
-
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-
-        assertEquals("ok", source.await().getOrThrow())
-        assertEquals(2, loads)
-        assertEquals("ok", source.getOrNull())
-    }
-
-    @Test
-    fun `cancellation reaches concurrent awaiters`() = runTest {
-        var loads = 0
-        val started = CompletableDeferred<Unit>()
-        val gate = CompletableDeferred<Unit>()
-        val source = dataSource {
-            loads++
-            if (loads == 1) {
-                started.complete(Unit)
-                gate.await()
-            }
-            "recovered"
-        }.cached()
-
-        val first = async { source.await() }
-        started.await()
-        yield()
-        val second = async { source.await() }
-        yield()
-
-        first.cancel(CancellationException("stop"))
-        assertFailsWith<CancellationException> { first.await() }
-        assertFailsWith<CancellationException> { second.await() }
-
-        assertNull(source.getOrNull())
-        assertEquals(1, loads)
-
-        assertEquals("recovered", source.await().getOrThrow())
-        assertEquals(2, loads)
-        assertEquals("recovered", source.getOrNull())
     }
 }

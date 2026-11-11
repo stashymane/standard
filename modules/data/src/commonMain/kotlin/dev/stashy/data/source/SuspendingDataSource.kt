@@ -1,20 +1,16 @@
 package dev.stashy.data.source
 
 import dev.stashy.data.DataSource
-import kotlinx.coroutines.CancellationException
+import dev.stashy.data.rethrowCancellation
 import kotlin.jvm.JvmInline
 
 @JvmInline
-internal value class SuspendingDataSource<T>(
+internal value class SuspendingDataSource<T : Any>(
     private val load: suspend () -> T,
 ) : DataSource<T> {
     override fun getOrNull(): T? = null
 
-    override suspend fun await(): Result<T> = try {
-        Result.success(load())
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Throwable) {
-        Result.failure(e)
-    }
+    override suspend fun await(): Result<T> = runCatching {
+        load()
+    }.rethrowCancellation()
 }

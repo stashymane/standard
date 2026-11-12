@@ -1,16 +1,14 @@
 package dev.stashy.data.paged
 
 /**
- * Loads pages by an opaque key.
- *
- * The key is not interpreted by this API, so it can represent an offset, a cursor or any
- * other value understood by the loader.
+ * Loads pages of [T] by their page [Key].
  */
-public fun interface PageLoader<K, T : Any> {
+public fun interface PageLoader<Key, T : Any> {
     /**
      * Loads the page at [key], or the first page when [key] is null.
      *
-     * [size] is the maximum number of items to request.
+     * @param key the key of the page, usually an ID or record offset. `null` for the first page.
+     * @param size the requested limit of items to return
      */
-    public suspend fun load(key: K?, size: Int): Page<T, K>
+    public suspend fun load(key: Key?, size: Int): Page<T, Key>
 }

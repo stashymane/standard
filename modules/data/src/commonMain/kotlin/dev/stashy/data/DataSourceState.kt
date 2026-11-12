@@ -22,21 +22,16 @@ public sealed interface DataSourceState<out T : Any> {
 public val <T : Any> DataSourceState<T>.valueOrNull: T?
     get() = (this as? DataSourceState.Success)?.value
 
-internal fun <T : Any, R : Any> DataSourceState<T>.mapState(
+public inline fun <T : Any, R : Any> DataSourceState<T>.map(
     transform: (T) -> R,
 ): DataSourceState<R> = when (this) {
     DataSourceState.Loading -> DataSourceState.Loading
-    is DataSourceState.Success -> runCatching { transform(value) }.fold(
-        onSuccess = { DataSourceState.Success(it) },
-        onFailure = { DataSourceState.Failure(it) },
-    )
-
+    is DataSourceState.Success -> runCatching { transform(value) }.toDataSourceState()
     is DataSourceState.Failure -> DataSourceState.Failure(cause)
 }
 
-internal fun <T : Any> Result<T>.toDataSourceState(): DataSourceState<T> =
-    if (isSuccess) {
-        DataSourceState.Success(getOrThrow())
-    } else {
-        DataSourceState.Failure(checkNotNull(exceptionOrNull()))
-    }
+@PublishedApi
+internal fun <T : Any> Result<T>.toDataSourceState(): DataSourceState<T> = fold(
+    onSuccess = { DataSourceState.Success(it) },
+    onFailure = { DataSourceState.Failure(it) },
+)

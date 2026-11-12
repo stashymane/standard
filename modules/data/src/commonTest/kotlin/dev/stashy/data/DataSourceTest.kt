@@ -2,7 +2,7 @@ package dev.stashy.data
 
 import dev.stashy.data.source.combine
 import dev.stashy.data.source.map
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -12,7 +12,7 @@ class DataSourceTest {
     @Test
     fun `data sources do not cache by default`() = runTest {
         var loads = 0
-        val source = dataSource {
+        val source = DataSource {
             loads++
             "value"
         }
@@ -26,7 +26,7 @@ class DataSourceTest {
     @Test
     fun `plain source state emits loading then success`() = runTest {
         var loads = 0
-        val source = dataSource {
+        val source = DataSource {
             loads++
             "value"
         }
@@ -40,7 +40,7 @@ class DataSourceTest {
 
     @Test
     fun `plain source state emits loading then failure`() = runTest {
-        val source = dataSource<String> {
+        val source = DataSource<String> {
             error("boom")
         }
 
@@ -54,7 +54,7 @@ class DataSourceTest {
     fun `mapping does not cache intermediate results`() = runTest {
         var loads = 0
         var maps = 0
-        val source = dataSource {
+        val source = DataSource {
             loads++
             1
         }.map {
@@ -71,7 +71,7 @@ class DataSourceTest {
 
     @Test
     fun `mapping maps state`() = runTest {
-        val source = dataSource { 1 }.map { it * 2 }
+        val source = DataSource { 1 }.map { it * 2 }
 
         assertEquals(
             DataSourceState.Success(2),
@@ -81,8 +81,8 @@ class DataSourceTest {
 
     @Test
     fun `combining maps state`() = runTest {
-        val first = dataSource { 1 }
-        val second = dataSource { 2 }
+        val first = DataSource { 1 }
+        val second = DataSource { 2 }
         val combined = combine(first, second) { a, b -> a + b }
 
         assertEquals(
@@ -93,7 +93,7 @@ class DataSourceTest {
 
     @Test
     fun `await rethrows cancellation`() = runTest {
-        val source = dataSource<String> {
+        val source = DataSource<String> {
             throw CancellationException("gone")
         }
 

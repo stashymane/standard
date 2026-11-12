@@ -126,7 +126,7 @@ class SharedDataSourceTest {
     fun `map failure retries without caching`() = runTest {
         var loads = 0
         var maps = 0
-        val source = dataSource {
+        val source = DataSource {
             loads++
             "payload"
         }.map {
@@ -360,5 +360,5 @@ class SharedDataSourceTest {
     }
 
     private fun <T : Any> TestScope.sharedSource(load: suspend () -> T): SharedDataSource<T> =
-        dataSource(load).shared()
+        DataSource(load).shared()
 }

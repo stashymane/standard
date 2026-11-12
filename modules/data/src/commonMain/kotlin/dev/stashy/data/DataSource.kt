@@ -1,5 +1,7 @@
 package dev.stashy.data
 
+import dev.stashy.data.paged.PageLoader
+import dev.stashy.data.paged.Pager
 import dev.stashy.data.source.SuspendingDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -27,9 +29,12 @@ public interface DataSource<out T : Any> {
             emit(DataSourceState.Loading)
             emit(await().toDataSourceState())
         }
-}
 
-public fun <T : Any> dataSource(load: suspend () -> T): DataSource<T> = SuspendingDataSource(load)
+    public companion object {
+        public operator fun <T : Any> invoke(load: suspend () -> T): DataSource<T> = SuspendingDataSource(load)
+        public fun <K, T : Any> paged(loader: PageLoader<K, T>): PagedDataSource<K, T> = Pager(loader)
+    }
+}
 
 public inline fun <T : Any, R> DataSource<T>.getOrElse(transform: (T) -> R, orElse: () -> R): R =
     getOrNull()?.let(transform) ?: orElse()

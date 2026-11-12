@@ -15,7 +15,7 @@ class PagingTest {
     fun `first page is loaded with a null key and requested size`() = runTest {
         var receivedKey: String? = "unset"
         var receivedSize = -1
-        val pager = Pager<String, Int> { key, size ->
+        val pager = DataSource.paged<String, Int> { key, size ->
             receivedKey = key
             receivedSize = size
             Page(listOf(1, 2), next = "next")
@@ -31,7 +31,7 @@ class PagingTest {
     @Test
     fun `next page is loaded with the provided key`() = runTest {
         var receivedKey: String? = null
-        val pager = Pager<String, Int> { key, _ ->
+        val pager = DataSource.paged<String, Int> { key, _ ->
             receivedKey = key
             Page(listOf(3, 4), next = null)
         }
@@ -45,7 +45,7 @@ class PagingTest {
     @Test
     fun `page size is selected for each call`() = runTest {
         val receivedSizes = mutableListOf<Int>()
-        val pager = Pager<String, Int> { _, size ->
+        val pager = DataSource.paged<String, Int> { _, size ->
             receivedSizes += size
             Page(emptyList(), next = null)
         }
@@ -58,12 +58,12 @@ class PagingTest {
 
     @Test
     fun `offset and cursor keys are both supported`() = runTest {
-        val offsetPager = Pager<Int, String> { key, size ->
+        val offsetPager = DataSource.paged<Int, String> { key, size ->
             val start = key ?: 0
             Page((start until start + size).map { "item$it" }, next = start + size)
         }
 
-        val cursorPager = Pager<String, String> { key, size ->
+        val cursorPager = DataSource.paged<String, String> { key, size ->
             val start = key?.removePrefix("cursor")?.toInt() ?: 0
             Page((start until start + size).map { "item$it" }, next = "cursor${start + size}")
         }
@@ -104,7 +104,7 @@ class PagingTest {
 
     @Test
     fun `page load failures are returned by await`() = runTest {
-        val pager = Pager<String, Int> { _, _ -> error("boom") }
+        val pager = DataSource.paged<String, Int> { _, _ -> error("boom") }
 
         val result = pager.page(size = 1).await()
 

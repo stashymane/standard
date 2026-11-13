@@ -23,6 +23,7 @@ kotlin {
 
     android {
         namespace = "dev.stashy.standard.ui.components"
+        androidResources.enable = true
     }
 
     @OptIn(ExperimentalWasmDsl::class)

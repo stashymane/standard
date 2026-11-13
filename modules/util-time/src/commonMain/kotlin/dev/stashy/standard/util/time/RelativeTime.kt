@@ -9,6 +9,7 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 internal data class RelativeTime(
@@ -18,6 +19,7 @@ internal data class RelativeTime(
 ) {
     enum class Unit {
         JustNow,
+        Seconds,
         Minutes,
         Hours,
         Days,
@@ -31,7 +33,8 @@ internal data class RelativeTime(
             val amount = elapsed.absoluteValue
             val past = !elapsed.isNegative()
             return when {
-                amount < 1.minutes -> RelativeTime(Unit.JustNow, 0, past = true)
+                amount < 1.seconds -> RelativeTime(Unit.JustNow, 0, past = true)
+                amount < 1.minutes -> RelativeTime(Unit.Seconds, amount.inWholeSeconds, past)
                 amount < 1.hours -> RelativeTime(Unit.Minutes, amount.inWholeMinutes, past)
                 amount < 1.days -> RelativeTime(Unit.Hours, amount.inWholeHours, past)
                 amount < 30.days -> RelativeTime(Unit.Days, amount.inWholeDays, past)
@@ -47,7 +50,7 @@ internal data class RelativeTime(
             return if (elapsed.isNegative()) {
                 (-elapsed).inWholeMilliseconds.coerceAtLeast(1)
             } else {
-                (1.minutes - elapsed).inWholeMilliseconds.coerceAtLeast(1)
+                (1.seconds - elapsed).inWholeMilliseconds.coerceAtLeast(1)
             }
         }
 
@@ -66,7 +69,7 @@ internal data class RelativeTime(
 }
 
 /**
- * Formats this instant as a short relative time string (e.g. `"5m ago"`, `"in 5m"`),
+ * Formats this instant as a short relative time string (e.g. `"5s ago"`, `"in 5m"`),
  * using Compose Multiplatform string resources for localization.
  *
  * The string updates automatically when its displayed value changes.
@@ -92,6 +95,10 @@ public fun Instant.toRelativeString(clock: Clock = Clock.System): String {
 @Composable
 private fun RelativeTime.localized(): String = when (unit) {
     RelativeTime.Unit.JustNow -> stringResource(Res.string.time_just_now)
+    RelativeTime.Unit.Seconds -> stringResource(
+        if (past) Res.string.time_seconds_ago else Res.string.time_seconds_in,
+        amount,
+    )
     RelativeTime.Unit.Minutes -> stringResource(
         if (past) Res.string.time_minutes_ago else Res.string.time_minutes_in,
         amount,
@@ -121,6 +128,7 @@ private fun RelativeTime.localized(): String = when (unit) {
 private val RelativeTime.Unit.width: Duration
     get() = when (this) {
         RelativeTime.Unit.JustNow,
+        RelativeTime.Unit.Seconds -> 1.seconds
         RelativeTime.Unit.Minutes -> 1.minutes
 
         RelativeTime.Unit.Hours -> 1.hours
@@ -131,7 +139,8 @@ private val RelativeTime.Unit.width: Duration
 
 private val RelativeTime.Unit.end: Duration?
     get() = when (this) {
-        RelativeTime.Unit.JustNow,
+        RelativeTime.Unit.JustNow -> 1.seconds
+        RelativeTime.Unit.Seconds -> 1.minutes
         RelativeTime.Unit.Minutes -> 1.hours
 
         RelativeTime.Unit.Hours -> 1.days

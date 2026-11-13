@@ -1,10 +1,12 @@
 <resources>
     <string name="time_just_now">ką tik</string>
+    <string name="time_seconds_ago">prieš %1$d sek.</string>
     <string name="time_minutes_ago">prieš %1$d min.</string>
     <string name="time_hours_ago">prieš %1$d val.</string>
     <string name="time_days_ago">prieš %1$d d.</string>
     <string name="time_months_ago">prieš %1$d mėn.</string>
     <string name="time_years_ago">prieš %1$d m.</string>
+    <string name="time_seconds_in">už %1$d sek.</string>
     <string name="time_minutes_in">už %1$d min.</string>
     <string name="time_hours_in">už %1$d val.</string>
     <string name="time_days_in">už %1$d d.</string>

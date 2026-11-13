@@ -15,8 +15,8 @@ class RelativeTimeTest {
 
     @Test
     fun `just now has no direction`() {
-        val future = RelativeTime.of(instant, instant - 30.seconds)
-        val past = RelativeTime.of(instant, instant + 30.seconds)
+        val future = RelativeTime.of(instant, instant - 500.milliseconds)
+        val past = RelativeTime.of(instant, instant + 500.milliseconds)
 
         assertEquals(RelativeTime(RelativeTime.Unit.JustNow, 0, past = true), future)
         assertEquals(future, past)
@@ -24,6 +24,9 @@ class RelativeTimeTest {
 
     @Test
     fun `past units change on the next value boundary`() {
+        assertDelay(500.milliseconds, instant + 500.milliseconds)
+        assertDelay(500.milliseconds, instant + 1.seconds + 500.milliseconds)
+        assertDelay(1.seconds, instant + 59.seconds)
         assertDelay(48.seconds, instant + 5.minutes + 12.seconds)
         assertDelay(10.seconds, instant + 59.minutes + 50.seconds)
         assertDelay(1.minutes, instant + 59.minutes)
@@ -39,7 +42,10 @@ class RelativeTimeTest {
 
     @Test
     fun `future units change on the previous value boundary`() {
-        assertDelay(30.seconds, instant - 30.seconds)
+        assertDelay(500.milliseconds, instant - 500.milliseconds)
+        assertDelay(500.milliseconds + 1.milliseconds, instant - 1.seconds - 500.milliseconds)
+        assertDelay(1.milliseconds, instant - 1.seconds)
+        assertDelay(1.milliseconds, instant - 59.seconds)
         assertDelay(12.seconds + 1.milliseconds, instant - 5.minutes - 12.seconds)
         assertDelay(58.seconds + 1.milliseconds, instant - 59.minutes - 58.seconds)
         assertDelay(1.milliseconds, instant - 1.minutes)

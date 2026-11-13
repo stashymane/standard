@@ -45,6 +45,7 @@ kotlin {
         commonMain.dependencies {
             implementation(composeLibs.jb.runtime)
             implementation(composeLibs.jb.components.resources)
+            implementation(kotlinLibs.coroutines.core)
         }
 
         commonTest.dependencies {

@@ -30,13 +30,14 @@ kotlin {
 
     android {
         namespace = "dev.stashy.standard.util.time"
+        androidResources.enable = true
     }
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         binaries.executable()
     }
-    
+
     js {
         binaries.executable()
     }

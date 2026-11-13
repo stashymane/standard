@@ -2,7 +2,6 @@ package dev.stashy.standard.ui.components.scroll
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -46,7 +45,7 @@ internal fun computeThumb(
 
 @Composable
 internal fun Scrollbar(
-    scrollState: ScrollState,
+    scrollbarState: ScrollbarState,
     isVertical: Boolean,
     modifier: Modifier = Modifier,
     collapsedThickness: Dp = ScrollbarThicknessCollapsed,
@@ -63,7 +62,7 @@ internal fun Scrollbar(
         MaterialTheme.colorScheme.outline.copy(alpha = if (active) 0.4f else 0.2f)
     )
 
-    if (scrollState.maxValue <= 0) return
+    if (scrollbarState.maxValue <= 0) return
 
     val trackModifier = if (isVertical) {
         Modifier.width(expandedThickness).fillMaxHeight()
@@ -77,24 +76,24 @@ internal fun Scrollbar(
         modifier = modifier
             .then(trackModifier)
             .hoverable(interactionSource)
-            .pointerInput(scrollState, isVertical) {
+            .pointerInput(scrollbarState, isVertical) {
                 val onDrag: (Float) -> Unit = { dragAmount ->
                     val trackSize = if (isVertical) size.height else size.width
-                    val contentSize = scrollState.maxValue + scrollState.viewportSize
+                    val contentSize = scrollbarState.maxValue + scrollbarState.viewportSize
                     val (thumbSize, _) = computeThumb(
                         trackSize,
                         contentSize,
-                        scrollState.viewportSize,
-                        scrollState.value,
+                        scrollbarState.viewportSize,
+                        scrollbarState.value,
                     )
                     val effectiveContentSize = contentSize.takeIf { it > 0 } ?: 1
                     val effectiveViewport =
-                        scrollState.viewportSize.coerceAtMost(effectiveContentSize)
+                        scrollbarState.viewportSize.coerceAtMost(effectiveContentSize)
                     val scrollRange = (effectiveContentSize - effectiveViewport).coerceAtLeast(1)
                     val scrollDelta =
                         dragAmount / (trackSize - thumbSize).coerceAtLeast(1) * scrollRange
                     scope.launch {
-                        scrollState.scrollTo((scrollState.value + scrollDelta).toInt())
+                        scrollbarState.scrollTo((scrollbarState.value + scrollDelta).toInt())
                     }
                 }
 
@@ -125,12 +124,12 @@ internal fun Scrollbar(
         ) { measurables, constraints ->
             val trackSize =
                 if (isVertical) constraints.maxHeight else constraints.maxWidth
-            val contentSize = scrollState.maxValue + scrollState.viewportSize
+            val contentSize = scrollbarState.maxValue + scrollbarState.viewportSize
             val (thumbSize, thumbOffset) = computeThumb(
                 trackSize,
                 contentSize,
-                scrollState.viewportSize,
-                scrollState.value,
+                scrollbarState.viewportSize,
+                scrollbarState.value,
             )
             val thumbPlaceable = measurables[0].measure(
                 if (isVertical) {

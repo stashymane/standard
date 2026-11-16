@@ -10,16 +10,16 @@ import androidx.compose.runtime.remember
 @Stable
 public interface ScrollbarState {
     /** Current scroll offset, in the same units accepted by [scrollTo]. */
-    public val value: Int
+    public val value: Double
 
     /** Maximum offset [value] can reach. */
-    public val maxValue: Int
+    public val maxValue: Double
 
     /** Size of the visible part of the content along the scroll axis. */
     public val viewportSize: Int
 
     /** Scrolls to the given offset, clamped to `0..maxValue`. */
-    public suspend fun scrollTo(value: Int)
+    public suspend fun scrollTo(value: Double)
 }
 
 @Composable

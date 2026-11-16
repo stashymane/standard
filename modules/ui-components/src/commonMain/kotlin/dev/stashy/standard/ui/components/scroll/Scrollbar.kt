@@ -19,7 +19,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal val ScrollbarThicknessCollapsed = 4.dp
 internal val ScrollbarThicknessExpanded = 6.dp
@@ -28,18 +32,19 @@ private const val MinThumbSizePx = 16
 
 internal fun computeThumb(
     trackSize: Int,
-    contentSize: Int,
+    contentSize: Double,
     viewportSize: Int,
-    scrollOffset: Int,
-): Pair<Int, Int> {
-    val effectiveContentSize = contentSize.takeIf { it > 0 } ?: 1
-    val effectiveViewport = viewportSize.coerceAtMost(effectiveContentSize)
+    scrollOffset: Double,
+): Pair<Double, Double> {
+    val effectiveContentSize = contentSize.takeIf { it > 0.0 } ?: 1.0
+    val effectiveViewport = viewportSize.toDouble().coerceAtMost(effectiveContentSize)
     val thumbSize =
-        (trackSize * effectiveViewport.toFloat() / effectiveContentSize).toInt()
-            .coerceAtLeast(MinThumbSizePx)
-    val scrollRange = (effectiveContentSize - effectiveViewport).coerceAtLeast(1)
-    val thumbOffset = ((trackSize - thumbSize) * (scrollOffset.toFloat() / scrollRange))
-        .toInt().coerceIn(0, trackSize - thumbSize)
+        (trackSize * effectiveViewport / effectiveContentSize)
+            .coerceAtLeast(MinThumbSizePx.toDouble())
+            .coerceAtMost(trackSize.toDouble())
+    val scrollRange = (effectiveContentSize - effectiveViewport).coerceAtLeast(1.0)
+    val thumbOffset = ((trackSize - thumbSize) * (scrollOffset / scrollRange))
+        .coerceIn(0.0, trackSize - thumbSize)
     return thumbSize to thumbOffset
 }
 
@@ -53,6 +58,8 @@ internal fun Scrollbar(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
+    val dragMutex = remember { Mutex() }
+    val unscrolledDragDistance = remember { mutableStateOf(0.0) }
 
     val hovered by interactionSource.collectIsHoveredAsState()
     var dragging by remember { mutableStateOf(false) }
@@ -62,7 +69,7 @@ internal fun Scrollbar(
         MaterialTheme.colorScheme.outline.copy(alpha = if (active) 0.4f else 0.2f)
     )
 
-    if (scrollbarState.maxValue <= 0) return
+    if (scrollbarState.maxValue <= 0.0) return
 
     val trackModifier = if (isVertical) {
         Modifier.width(expandedThickness).fillMaxHeight()
@@ -79,33 +86,50 @@ internal fun Scrollbar(
             .pointerInput(scrollbarState, isVertical) {
                 val onDrag: (Float) -> Unit = { dragAmount ->
                     val trackSize = if (isVertical) size.height else size.width
-                    val contentSize = scrollbarState.maxValue + scrollbarState.viewportSize
-                    val (thumbSize, _) = computeThumb(
-                        trackSize,
-                        contentSize,
-                        scrollbarState.viewportSize,
-                        scrollbarState.value,
-                    )
-                    val effectiveContentSize = contentSize.takeIf { it > 0 } ?: 1
-                    val effectiveViewport =
-                        scrollbarState.viewportSize.coerceAtMost(effectiveContentSize)
-                    val scrollRange = (effectiveContentSize - effectiveViewport).coerceAtLeast(1)
-                    val scrollDelta =
-                        dragAmount / (trackSize - thumbSize).coerceAtLeast(1) * scrollRange
-                    scope.launch {
-                        scrollbarState.scrollTo((scrollbarState.value + scrollDelta).toInt())
+                    val drag = dragAmount.toDouble()
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        dragMutex.withLock {
+                            val viewportSize = scrollbarState.viewportSize
+                            val maxValue = scrollbarState.maxValue
+                            if (maxValue <= 0.0) return@withLock
+
+                            val (thumbSize, thumbOffset) = computeThumb(
+                                trackSize,
+                                maxValue + viewportSize,
+                                viewportSize,
+                                scrollbarState.value,
+                            )
+                            if (trackSize <= thumbSize) return@withLock
+
+                            val thumbRange = trackSize - thumbSize
+                            val scrollScale = thumbRange / maxValue
+                            val currentPosition = thumbOffset
+                            val targetPosition = (currentPosition + drag +
+                                unscrolledDragDistance.value)
+                                .coerceIn(0.0, thumbRange)
+                            val sliderDelta = targetPosition - currentPosition
+
+                            scrollbarState.scrollTo(targetPosition / scrollScale)
+                            unscrolledDragDistance.value += drag - sliderDelta
+                        }
                     }
                 }
 
                 if (isVertical) {
                     detectVerticalDragGestures(
-                        onDragStart = { dragging = true },
+                        onDragStart = {
+                            dragging = true
+                            unscrolledDragDistance.value = 0.0
+                        },
                         onDragEnd = { dragging = false },
                         onDragCancel = { dragging = false },
                     ) { _, dragAmount -> onDrag(dragAmount) }
                 } else {
                     detectHorizontalDragGestures(
-                        onDragStart = { dragging = true },
+                        onDragStart = {
+                            dragging = true
+                            unscrolledDragDistance.value = 0.0
+                        },
                         onDragEnd = { dragging = false },
                         onDragCancel = { dragging = false },
                     ) { _, dragAmount -> onDrag(dragAmount) }
@@ -131,22 +155,24 @@ internal fun Scrollbar(
                 scrollbarState.viewportSize,
                 scrollbarState.value,
             )
+            val thumbSizePx = thumbSize.roundToInt()
+            val thumbOffsetPx = thumbOffset.roundToInt()
             val thumbPlaceable = measurables[0].measure(
                 if (isVertical) {
-                    constraints.copy(minHeight = thumbSize, maxHeight = thumbSize)
+                    constraints.copy(minHeight = thumbSizePx, maxHeight = thumbSizePx)
                 } else {
-                    constraints.copy(minWidth = thumbSize, maxWidth = thumbSize)
+                    constraints.copy(minWidth = thumbSizePx, maxWidth = thumbSizePx)
                 }
             )
             layout(constraints.maxWidth, constraints.maxHeight) {
                 if (isVertical) {
                     thumbPlaceable.placeRelative(
                         constraints.maxWidth - thumbPlaceable.width,
-                        thumbOffset,
+                        thumbOffsetPx,
                     )
                 } else {
                     thumbPlaceable.placeRelative(
-                        thumbOffset,
+                        thumbOffsetPx,
                         constraints.maxHeight - thumbPlaceable.height,
                     )
                 }

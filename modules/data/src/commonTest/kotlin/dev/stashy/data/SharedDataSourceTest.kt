@@ -359,6 +359,21 @@ class SharedDataSourceTest {
         assertEquals(DataSourceState.Success(3), combined.state.first())
     }
 
+    @Test
+    fun `combining three shared sources returns cached values`() = runTest {
+        val first = sharedSource { 1 }
+        val second = sharedSource { 2 }
+        val third = sharedSource { 3 }
+        val combined = combine(first, second, third) { a, b, c -> a + b + c }
+
+        assertNull(combined.getOrNull())
+
+        first.preload()
+        second.preload()
+        third.preload()
+        assertEquals(6, combined.getOrNull())
+    }
+
     private fun <T : Any> TestScope.sharedSource(load: suspend () -> T): SharedDataSource<T> =
         DataSource(load).shared()
 }

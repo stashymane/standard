@@ -92,6 +92,58 @@ class DataSourceTest {
     }
 
     @Test
+    fun `combining three sources awaits all values`() = runTest {
+        var loads = 0
+        val first = DataSource {
+            loads++
+            1
+        }
+        val second = DataSource {
+            loads++
+            2
+        }
+        val third = DataSource {
+            loads++
+            3
+        }
+
+        val combined = combine(first, second, third) { a, b, c -> a + b + c }
+
+        assertEquals(6, combined.await().getOrThrow())
+        assertEquals(3, loads)
+    }
+
+    @Test
+    fun `combining four sources maps state`() = runTest {
+        val combined = combine(
+            DataSource { 1 },
+            DataSource { 2 },
+            DataSource { 3 },
+            DataSource { 4 },
+        ) { a, b, c, d -> "$a$b$c$d" }
+
+        assertEquals(
+            DataSourceState.Success("1234"),
+            combined.state.first { it is DataSourceState.Success },
+        )
+    }
+
+    @Test
+    fun `combining three sources fails if any source fails`() = runTest {
+        val combined = combine(
+            DataSource { 1 },
+            DataSource<Int> { error("boom") },
+            DataSource { 3 },
+        ) { a, b, c -> a + b + c }
+
+        assertEquals(
+            "boom",
+            assertIs<DataSourceState.Failure<Int>>(combined.state.first { it is DataSourceState.Failure }).cause.message,
+        )
+        assertEquals("boom", assertFailsWith<IllegalStateException> { combined.await() }.message)
+    }
+
+    @Test
     fun `await rethrows cancellation`() = runTest {
         val source = DataSource<String> {
             throw CancellationException("gone")

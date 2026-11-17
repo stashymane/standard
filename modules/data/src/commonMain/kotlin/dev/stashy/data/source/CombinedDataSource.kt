@@ -3,57 +3,75 @@ package dev.stashy.data.source
 import dev.stashy.data.DataSource
 import dev.stashy.data.DataSourceState
 import dev.stashy.data.rethrowCancellation
+import dev.stashy.data.toDataSourceState
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
-internal class CombinedDataSource<A : Any, B : Any, R : Any>(
-    private val first: DataSource<A>,
-    private val second: DataSource<B>,
-    private val transform: (A, B) -> R,
+@PublishedApi
+internal class CombinedDataSource<R : Any>(
+    private val sources: List<DataSource<Any>>,
+    private val transform: (List<Any>) -> R,
 ) : DataSource<R> {
     override fun getOrNull(): R? {
-        val a = first.getOrNull() ?: return null
-        val b = second.getOrNull() ?: return null
-        return transform(a, b)
+        val values = ArrayList<Any>(sources.size)
+        for (source in sources) values += source.getOrNull() ?: return null
+        return transform(values)
     }
 
     override suspend fun await(): Result<R> = coroutineScope {
-        val a = async { first.await().getOrThrow() }
-        val b = async { second.await().getOrThrow() }
-        runCatching { transform(a.await(), b.await()) }.rethrowCancellation()
+        runCatching {
+            val values = sources.map { async { it.await().getOrThrow() } }.awaitAll()
+            transform(values)
+        }.rethrowCancellation()
     }
 
-    override val state: Flow<DataSourceState<R>> =
-        combine(first.state, second.state) { a, b -> combineStates(a, b, transform) }
+    override val state: Flow<DataSourceState<R>> = combine(
+        sources.map(DataSource<Any>::state)
+    ) { states ->
+        combineStates(states.toList(), transform)
+    }
 }
 
-private fun <A : Any, B : Any, R : Any> combineStates(
-    first: DataSourceState<A>,
-    second: DataSourceState<B>,
-    transform: (A, B) -> R,
+private fun <R : Any> combineStates(
+    states: List<DataSourceState<Any>>,
+    transform: (List<Any>) -> R,
 ): DataSourceState<R> {
-    if (first is DataSourceState.Failure) {
-        return DataSourceState.Failure(first.cause)
-    }
-    if (second is DataSourceState.Failure) {
-        return DataSourceState.Failure(second.cause)
-    }
-    if (first is DataSourceState.Loading || second is DataSourceState.Loading) {
-        return DataSourceState.Loading
-    }
+    states.forEach { if (it is DataSourceState.Failure) return DataSourceState.Failure(it.cause) }
+    if (states.any { it is DataSourceState.Loading }) return DataSourceState.Loading
 
-    first as DataSourceState.Success
-    second as DataSourceState.Success
-    return runCatching { transform(first.value, second.value) }.fold(
-        onSuccess = { DataSourceState.Success(it) },
-        onFailure = { DataSourceState.Failure(it) },
-    )
+    val values = states.map { (it as DataSourceState.Success<Any>).value }
+    return runCatching { transform(values) }.toDataSourceState()
 }
 
-public fun <A : Any, B : Any, R : Any> combine(
+public inline fun <A : Any, B : Any, R : Any> combine(
     first: DataSource<A>,
     second: DataSource<B>,
-    transform: (A, B) -> R,
-): DataSource<R> = CombinedDataSource(first, second, transform)
+    crossinline transform: (A, B) -> R,
+): DataSource<R> = CombinedDataSource(listOf(first, second)) { values ->
+    @Suppress("UNCHECKED_CAST")
+    transform(values[0] as A, values[1] as B)
+}
+
+public inline fun <A : Any, B : Any, C : Any, R : Any> combine(
+    first: DataSource<A>,
+    second: DataSource<B>,
+    third: DataSource<C>,
+    crossinline transform: (A, B, C) -> R,
+): DataSource<R> = CombinedDataSource(listOf(first, second, third)) { values ->
+    @Suppress("UNCHECKED_CAST")
+    transform(values[0] as A, values[1] as B, values[2] as C)
+}
+
+public inline fun <A : Any, B : Any, C : Any, D : Any, R : Any> combine(
+    first: DataSource<A>,
+    second: DataSource<B>,
+    third: DataSource<C>,
+    fourth: DataSource<D>,
+    crossinline transform: (A, B, C, D) -> R,
+): DataSource<R> = CombinedDataSource(listOf(first, second, third, fourth)) { values ->
+    @Suppress("UNCHECKED_CAST")
+    transform(values[0] as A, values[1] as B, values[2] as C, values[3] as D)
+}

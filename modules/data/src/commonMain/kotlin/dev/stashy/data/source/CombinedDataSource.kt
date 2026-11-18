@@ -2,8 +2,8 @@ package dev.stashy.data.source
 
 import dev.stashy.data.DataSource
 import dev.stashy.data.DataSourceState
-import dev.stashy.data.rethrowCancellation
 import dev.stashy.data.toDataSourceState
+import dev.stashy.standard.coroutine.runCatchingSuspend
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -22,10 +22,10 @@ internal class CombinedDataSource<R : Any>(
     }
 
     override suspend fun await(): Result<R> = coroutineScope {
-        runCatching {
+        runCatchingSuspend {
             val values = sources.map { async { it.await().getOrThrow() } }.awaitAll()
             transform(values)
-        }.rethrowCancellation()
+        }
     }
 
     override val state: Flow<DataSourceState<R>> = combine(

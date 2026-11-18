@@ -1,11 +1,7 @@
-import org.jetbrains.compose.ComposeExtension
-import org.jetbrains.compose.resources.ResourcesExtension
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     alias(kotlinLibs.plugins.multiplatform)
-    alias(kotlinLibs.plugins.composeCompiler)
-    alias(composeLibs.plugins.compose)
     alias(androidLibs.plugins.library)
 
     id("multiplatform.target.jvm")
@@ -19,18 +15,11 @@ plugins {
     id("plugins.dokka")
 }
 
-configure<ComposeExtension> {
-    configure<ResourcesExtension> {
-        packageOfResClass = "dev.stashy.standard.util.time"
-    }
-}
-
 kotlin {
     explicitApi()
 
     android {
         namespace = "dev.stashy.standard.util.time"
-        androidResources.enable = true
     }
 
     @OptIn(ExperimentalWasmDsl::class)
@@ -43,12 +32,6 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies {
-            implementation(composeLibs.jb.runtime)
-            implementation(composeLibs.jb.components.resources)
-            implementation(kotlinLibs.coroutines.core)
-        }
-
         commonTest.dependencies {
             implementation(kotlinLibs.test)
         }

@@ -1,3 +1,5 @@
+import org.jetbrains.compose.ComposeExtension
+import org.jetbrains.compose.resources.ResourcesExtension
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
@@ -16,6 +18,12 @@ plugins {
     id("plugins.publish.github")
     alias(libs.plugins.dokka)
     id("plugins.dokka")
+}
+
+configure<ComposeExtension> {
+    configure<ResourcesExtension> {
+        packageOfResClass = "dev.stashy.standard.ui.components"
+    }
 }
 
 kotlin {
@@ -38,11 +46,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(projects.modules.uiGradients)
+            implementation(projects.modules.utilTime)
 
             implementation(composeLibs.jb.runtime)
+            implementation(composeLibs.jb.components.resources)
             implementation(composeLibs.jb.foundation)
             implementation(composeLibs.jb.material3)
             implementation(composeLibs.jb.uiToolingPreview)
+
+            implementation(kotlinLibs.coroutines.core)
         }
 
         commonTest.dependencies {

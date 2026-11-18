@@ -1,3 +1,3 @@
 # util-time
 
-Relative time strings (`x time ago` / `in x time`), localized via Compose Multiplatform resources.
+Relative time model: an instant's distance from a reference point, expressed as a unit and amount.

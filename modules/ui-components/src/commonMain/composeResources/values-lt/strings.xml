@@ -1,0 +1,12 @@
+<resources>
+    <string name="time_just_now">ką tik</string>
+    <string name="time_seconds">%1$d sek.</string>
+    <string name="time_minutes">%1$d min.</string>
+    <string name="time_hours">%1$d val.</string>
+    <string name="time_days">%1$d d.</string>
+    <string name="time_months">%1$d mėn.</string>
+    <string name="time_years">%1$d m.</string>
+    <string name="time_component_join">%1$s %2$s</string>
+    <string name="time_ago">prieš %1$s</string>
+    <string name="time_in">už %1$s</string>
+</resources>

@@ -40,7 +40,7 @@ kotlin {
             implementation(composeLibs.jb.foundation)
             implementation(kotlinLibs.serialization.json)
 
-            implementation(libs.colormath.core)
+            api(libs.colormath.core)
             implementation(libs.colormath.compose)
         }
 

@@ -37,6 +37,8 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation(projects.modules.uiGradients)
+
             implementation(composeLibs.jb.runtime)
             implementation(composeLibs.jb.foundation)
             implementation(composeLibs.jb.material3)

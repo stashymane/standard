@@ -4,6 +4,7 @@ plugins {
 }
 
 dependencies {
+    dokka(projects.modules.coroutineUtil)
     dokka(projects.modules.cron)
     dokka(projects.modules.data)
     dokka(projects.modules.exposedCursor)

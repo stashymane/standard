@@ -168,4 +168,22 @@ public sealed interface Schedule {
             }
         }
     }
+
+    /**
+     * Runs whenever any of [children] would, taking the earliest occurrence. Each child keeps its
+     * own cadence.
+     */
+    @Serializable
+    @SerialName("earliest")
+    public data class Earliest(public val children: List<Schedule>) : Schedule {
+        init {
+            require(children.isNotEmpty()) { "children must not be empty" }
+        }
+
+        override fun firstOccurrence(now: Instant): Instant =
+            children.minOf { child -> child.firstOccurrence(now) }
+
+        override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? =
+            children.mapNotNull { child -> child.nextOccurrence(scheduledAt, finishedAt) }.minOrNull()
+    }
 }

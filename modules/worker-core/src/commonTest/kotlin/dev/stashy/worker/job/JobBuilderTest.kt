@@ -18,7 +18,7 @@ class JobBuilderTest {
             defineJob("handler", Job.Id("job")) { retry = RetryPolicy.Instant() }
         }
 
-        assertEquals("Job 'job' has no schedule", error.message)
+        assertEquals("Job \"job\" has no schedule", error.message)
     }
 
     @Test

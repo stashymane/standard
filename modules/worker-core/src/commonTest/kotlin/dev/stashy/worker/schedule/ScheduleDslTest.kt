@@ -80,4 +80,20 @@ class ScheduleDslTest {
             }
         }
     }
+
+    @Test
+    fun `earliest unions its arguments`() {
+        assertEquals(
+            Schedule.Earliest(
+                listOf(
+                    Schedule.Cron("0 */5 * ? * MON-FRI *", TimeZone.UTC.id),
+                    Schedule.Cron("0 0 * ? * SAT,SUN *", TimeZone.UTC.id),
+                ),
+            ),
+            Dsl.earliest(
+                Dsl.cron("0 */5 * ? * MON-FRI *", TimeZone.UTC),
+                Dsl.cron("0 0 * ? * SAT,SUN *", TimeZone.UTC),
+            ),
+        )
+    }
 }

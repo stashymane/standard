@@ -140,6 +140,9 @@ job<TimedEmailConfig> { context, config ->
   until the next one begins and never schedules an occurrence at or after that point; the first
   phase is unbounded. A phase that becomes active while an occurrence is running starts its own
   cadence.
+- `Schedule.Earliest(children)` runs whenever any of its children would, taking the earliest next
+  occurrence. Children keep their own cadence, so several cron windows can drive one job without
+  phase boundaries.
 
 Schedules are values, so the DSL merely builds them:
 
@@ -151,11 +154,20 @@ worker.schedule("report", ReportConfig(...)) {
         then { after(15.minutes) }
     }
 }
+
+worker.schedule("poll", PollConfig(...)) {
+    schedule = earliest(
+        cron("0 */5 * ? * MON-FRI *", TimeZone.UTC),
+        cron("0 0 * ? * SAT,SUN *", TimeZone.UTC),
+    )
+}
 ```
 
 `until` closes a segment at its instant and `then` opens the final, unbounded one; `schedule` must be
 assigned for the job to build. `Schedule.activeAt(instant)` resolves the innermost schedule that
 applies, which is how `LateExecutionPolicy` recognizes one-shot occurrences inside a phased schedule.
+A union has no single active child, so `activeAt` returns the union itself and `LateExecutionPolicy`
+does not apply to it.
 
 Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or rescheduling rows
 outside `Worker.sync`.

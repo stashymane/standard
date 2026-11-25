@@ -60,6 +60,12 @@ class JobSerializationTest {
                     Schedule.Phased.Phase(Instant.parse("2026-10-27T12:00:00Z"), Schedule.Once(Instant.parse("2026-10-28T12:00:00Z"))),
                 ),
             ),
+            Schedule.Earliest(
+                listOf(
+                    Schedule.Cron("0 */5 * ? * MON-FRI *", TimeZone.UTC.id),
+                    Schedule.FixedRate(1.hours),
+                ),
+            ),
         )
 
         for (schedule in schedules) {

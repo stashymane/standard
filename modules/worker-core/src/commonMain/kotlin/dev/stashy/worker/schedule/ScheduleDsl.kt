@@ -52,4 +52,10 @@ public interface ScheduleDsl {
      */
     public fun phased(configure: PhasedScheduleBuilder.() -> Unit): Schedule =
         PhasedScheduleBuilder().apply(configure).build()
+
+    /**
+     * Runs whenever any of [children] would, taking the earliest occurrence.
+     */
+    public fun earliest(vararg children: Schedule): Schedule =
+        Schedule.Earliest(children.toList())
 }

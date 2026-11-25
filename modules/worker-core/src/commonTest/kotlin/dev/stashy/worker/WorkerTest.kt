@@ -697,7 +697,7 @@ class WorkerTest {
         val store = InMemoryJobQueue(TestJson)
         val worker = worker(clock, store) {
             job<Unit> { _, _ ->
-                resource { Unit }.onDispose { throw AssertionError("boom") }
+                resource { }.onDispose { throw AssertionError("boom") }
                 handler { }
             }
         }

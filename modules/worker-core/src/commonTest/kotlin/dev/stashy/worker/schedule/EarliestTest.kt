@@ -1,6 +1,5 @@
 package dev.stashy.worker.schedule
 
-import dev.stashy.standard.cron.Cron
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

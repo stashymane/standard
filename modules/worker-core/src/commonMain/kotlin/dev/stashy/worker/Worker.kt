@@ -16,7 +16,7 @@ import kotlin.uuid.Uuid
 import kotlinx.coroutines.Job as CoroutineJob
 
 /**
- * Polls one or more [JobQueue]s, claims due jobs, and delegates execution to a [JobExecutor] per
+ * Polls one or more [JobQueue]s, claims due jobs, and delegates execution to a [JobExecutor][dev.stashy.worker.internal.JobExecutor] per
  * queue.
  *
  * Each [WorkerBuilder.jobs] block binds a queue to the handlers that queue may execute. Several
@@ -100,11 +100,11 @@ public class Worker internal constructor(
         start(this).join()
     }
 
-    public fun requestStop(): Unit {
+    public fun requestStop() {
         runJob.value?.cancel()
     }
 
-    public suspend fun stop(): Unit {
+    public suspend fun stop() {
         val job = runJob.value ?: return
         job.cancelAndJoin()
         runJob.compareAndSet(job, null)

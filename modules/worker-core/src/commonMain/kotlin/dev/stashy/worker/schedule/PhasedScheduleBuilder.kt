@@ -15,7 +15,7 @@ public class PhasedScheduleBuilder internal constructor() {
     /**
      * Schedules [configure] from the previous segment until [at].
      */
-    public fun until(at: Instant, configure: ScheduleDsl.() -> Schedule): Unit {
+    public fun until(at: Instant, configure: ScheduleDsl.() -> Schedule) {
         require(!finished) { "then must be the last segment" }
         val previous = start
         require(previous == null || at > previous) { "until instants must increase" }
@@ -26,7 +26,7 @@ public class PhasedScheduleBuilder internal constructor() {
     /**
      * Schedules [configure] from the last `until` instant onwards, without an end.
      */
-    public fun then(configure: ScheduleDsl.() -> Schedule): Unit {
+    public fun then(configure: ScheduleDsl.() -> Schedule) {
         require(!finished) { "then must be the last segment" }
         add(configure)
         finished = true

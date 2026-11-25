@@ -25,14 +25,14 @@ public class WorkerBuilder internal constructor() {
         pool: ConcurrencyPool? = null,
         config: JobsConfig.() -> Unit = {},
         configure: JobsRegistry<*>.() -> Unit,
-    ): Unit {
+    ) {
         bindings += bind(queue, history, pool ?: defaultPool(), config, configure)
     }
 
     /**
      * Configures the worker's runtime settings.
      */
-    public fun config(configure: WorkerConfig.() -> Unit): Unit {
+    public fun config(configure: WorkerConfig.() -> Unit) {
         config.configure()
     }
 

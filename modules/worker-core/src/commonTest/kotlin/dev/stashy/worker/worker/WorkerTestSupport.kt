@@ -4,6 +4,7 @@ package dev.stashy.worker.worker
 
 import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerBuilder
+import dev.stashy.worker.WorkerLogger
 import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.job.RetryPolicy
 import dev.stashy.worker.pool.ConcurrencyPool
@@ -73,6 +74,7 @@ internal fun TestScope.worker(
     clock: Clock,
     store: JobQueue<*>,
     history: JobHistory? = null,
+    logger: WorkerLogger = WorkerLogger.None,
     retry: RetryPolicy = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0),
     lease: Duration = 1.minutes,
     heartbeat: Duration = 20.seconds,
@@ -85,6 +87,7 @@ internal fun TestScope.worker(
         shutdownGracePeriod = 1.seconds
         this.clock = clock
         dispatcher = StandardTestDispatcher(testScheduler)
+        this.logger = logger
         defaults {
             pollInterval = poll
             this.prepareWindow = prepareWindow

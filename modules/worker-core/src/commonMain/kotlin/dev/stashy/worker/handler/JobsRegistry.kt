@@ -59,7 +59,7 @@ public class JobsRegistry<P : Any> internal constructor(
         noinline block: JobBuilder<C>,
     ): Unit = job(pool, serializer<C>(), block)
 
-    public fun <C : Any> register(handler: Handler<C>, pool: ConcurrencyPool? = null): Unit {
+    public fun <C : Any> register(handler: Handler<C>, pool: ConcurrencyPool? = null) {
         val binding = handlerBinding<P, C>(handler)
         require(binding.id !in registeredIds) { "Job '${binding.id}' is already registered" }
         registeredIds += binding.id

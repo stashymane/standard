@@ -1,13 +1,9 @@
 package dev.stashy.worker.internal
 
-import dev.stashy.worker.JobsConfig
-import dev.stashy.worker.Worker
-import dev.stashy.worker.WorkerConfig
-import dev.stashy.worker.WorkerLogger
+import dev.stashy.worker.*
 import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.QueuedJob
-import dev.stashy.worker.log
 import dev.stashy.worker.pool.ConcurrencyPool
 import dev.stashy.worker.pool.PoolRequest
 import dev.stashy.worker.pool.describe
@@ -54,7 +50,7 @@ internal class Queue<P : Any>(
     /**
      * Cancels the local execution of [id], if this queue owns it.
      */
-    fun cancelLocal(id: Job.Id): Unit {
+    fun cancelLocal(id: Job.Id) {
         inFlight.value[id]?.coroutine?.cancel(JobCancelledException())
     }
 
@@ -87,11 +83,11 @@ internal class Queue<P : Any>(
         }
     }
 
-    fun clearExecutions(): Unit {
+    fun clearExecutions() {
         inFlight.getAndUpdate { emptyMap() }.values.forEach { it.releaseSlot() }
     }
 
-    private fun purgeCompleted(): Unit {
+    private fun purgeCompleted() {
         for ((id, execution) in inFlight.value) {
             if (!execution.coroutine.isCompleted) continue
             inFlight.update { current -> current - id }
@@ -99,7 +95,7 @@ internal class Queue<P : Any>(
         }
     }
 
-    private suspend fun sweepExpired(): Unit {
+    private suspend fun sweepExpired() {
         val expired = try {
             store.expired(workerConfig.clock.now())
         } catch (cancelled: CancellationException) {
@@ -115,7 +111,7 @@ internal class Queue<P : Any>(
         }
     }
 
-    private suspend fun claimRunnable(executionScope: CoroutineScope): Unit {
+    private suspend fun claimRunnable(executionScope: CoroutineScope) {
         val handlerIds = handlers.ids()
         if (handlerIds.isEmpty()) return
 

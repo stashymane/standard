@@ -37,7 +37,6 @@ public data class JobsConfig(
      */
     public var retry: RetryPolicy = Defaults.retry
 ) {
-    @Suppress("ConstPropertyName")
     public object Defaults {
         public val pollInterval: Duration = 5.seconds
         public val prepareWindow: Duration = 5.seconds

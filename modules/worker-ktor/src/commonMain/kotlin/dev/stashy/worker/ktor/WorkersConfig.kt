@@ -28,14 +28,14 @@ public class WorkersConfig {
         pool: ConcurrencyPool? = null,
         config: JobsConfig.() -> Unit = {},
         configure: JobsRegistry<*>.() -> Unit,
-    ): Unit {
+    ) {
         jobBlocks += JobBlock(queue, history, pool, config, configure)
     }
 
     /**
      * Configures the worker's runtime settings.
      */
-    public fun config(configure: WorkerConfig.() -> Unit): Unit {
+    public fun config(configure: WorkerConfig.() -> Unit) {
         configBlocks += configure
     }
 

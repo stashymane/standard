@@ -5,6 +5,10 @@ jvm-target = "17"
 mavenPublish = "0.37.0"
 dokka = "2.2.0"
 
+koin = "4.2.2"
+koin-plugin = "1.2.3"
+materialIcons = "1.7.3"
+
 colormath = "3.7.0"
 
 kotest = "6.2.6"
@@ -31,6 +35,12 @@ sqlite = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 kotest-assertions = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 testResources = { module = "com.goncalossilva:resources", version.ref = "testResources" }
 
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-annotations = { module = "io.insert-koin:koin-annotations", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+material-icons-core = { module = "org.jetbrains.compose.material:material-icons-core", version.ref = "materialIcons" }
+
 [plugins]
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
 mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }
+koinCompiler = { id = "io.insert-koin.compiler.plugin", version.ref = "koin-plugin" }

@@ -3,6 +3,7 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 pluginManagement {
     repositories {
         google()
+        mavenCentral()
         gradlePluginPortal()
     }
 
@@ -63,6 +64,7 @@ include(
     "modules:worker-exposed-r2dbc",
     "modules:worker-exposed-tests",
     "modules:worker-ktor",
+    "samples:gallery",
     "samples:navigation-sample",
 )
 

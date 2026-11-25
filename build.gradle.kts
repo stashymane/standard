@@ -8,4 +8,5 @@ plugins {
     alias(androidLibs.plugins.application) apply false
     alias(libs.plugins.mavenPublish) apply false
     alias(libs.plugins.dokka) apply false
+    alias(libs.plugins.koinCompiler) apply false
 }

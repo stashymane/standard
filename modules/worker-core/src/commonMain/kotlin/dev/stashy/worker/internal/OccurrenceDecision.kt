@@ -97,7 +97,7 @@ internal fun OccurrenceDecision.terminalOutcome(): TerminalOutcome? = when (this
  * Whether an occurrence of this job starting at [startAt] violates its late-execution policy.
  */
 internal fun Job.startsTooLate(startAt: Instant, scheduledAt: Instant): Boolean {
-    if (schedule !is Schedule.Once) return false
+    if (schedule.activeAt(scheduledAt) !is Schedule.Once) return false
     val policy = latePolicy as? LateExecutionPolicy.FailAfter ?: return false
     return startAt - scheduledAt > policy.tolerance
 }

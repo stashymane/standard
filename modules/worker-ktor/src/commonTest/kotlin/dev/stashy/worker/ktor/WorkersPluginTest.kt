@@ -57,7 +57,7 @@ class WorkersPluginTest {
 
             launch {
                 workers.schedule("test-job", Unit) {
-                    once(Clock.System.now())
+                    schedule = once(Clock.System.now())
                 }
             }
 
@@ -98,10 +98,10 @@ class WorkersPluginTest {
 
             launch {
                 workers.schedule("unit-job", Unit) {
-                    once(Clock.System.now())
+                    schedule = once(Clock.System.now())
                 }
                 workers.schedule("string-job", "reused") {
-                    once(Clock.System.now())
+                    schedule = once(Clock.System.now())
                 }
             }
         }
@@ -141,7 +141,7 @@ class WorkersPluginTest {
 
             launch {
                 workers.schedule("local-job", "local") {
-                    once(Clock.System.now())
+                    schedule = once(Clock.System.now())
                 }
             }
         }
@@ -182,7 +182,7 @@ class WorkersPluginTest {
 
             launch {
                 workers.schedule("failing-job", Unit) {
-                    once(Clock.System.now())
+                    schedule = once(Clock.System.now())
                 }
             }
         }

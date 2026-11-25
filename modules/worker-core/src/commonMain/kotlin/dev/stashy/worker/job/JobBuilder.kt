@@ -1,60 +1,35 @@
 package dev.stashy.worker.job
 
-import dev.stashy.standard.cron.Cron
+import dev.stashy.worker.JobsDsl
 import dev.stashy.worker.schedule.Schedule
-import kotlinx.datetime.TimeZone
-import kotlin.time.Duration
-import kotlin.time.Instant
+import dev.stashy.worker.schedule.ScheduleDsl
 
 /**
  * Builds a [Job] for a registered handler.
  */
+@JobsDsl
 public class JobBuilder internal constructor(
     private val handlerId: String,
     private val id: Job.Id,
     defaultRetry: RetryPolicy,
-) {
+) : ScheduleDsl {
     public var enabled: Boolean = true
     public var retry: RetryPolicy = defaultRetry
     public var latePolicy: LateExecutionPolicy = LateExecutionPolicy.Run
 
-    private var selectedSchedule: Schedule? = null
+    /**
+     * When the job runs; null until the builder defines one.
+     */
+    public var schedule: Schedule? = null
 
-    public fun schedule(schedule: Schedule): Unit {
-        selectedSchedule = schedule
-    }
-
-    public fun once(at: Instant): Unit {
-        selectedSchedule = Schedule.Once(at)
-    }
-
-    public fun every(interval: Duration, startAt: Instant? = null): Unit {
-        selectedSchedule = Schedule.FixedRate(interval, startAt)
-    }
-
-    public fun after(interval: Duration): Unit {
-        selectedSchedule = Schedule.FixedDelay(interval)
-    }
-
-    public fun cron(expression: String, timeZone: TimeZone = TimeZone.currentSystemDefault()): Unit {
-        selectedSchedule = Schedule.Cron(expression, timeZone.id)
-    }
-
-    public fun cron(expression: Cron, timeZone: TimeZone = TimeZone.currentSystemDefault()): Unit {
-        selectedSchedule = Schedule.Cron(expression, timeZone.id)
-    }
-
-    internal fun build(): Job {
-        val schedule = selectedSchedule ?: error("Job '${id.value}' has no schedule")
-        return Job(
-            id = id,
-            handlerId = handlerId,
-            schedule = schedule,
-            enabled = enabled,
-            retry = retry,
-            latePolicy = latePolicy,
-        )
-    }
+    internal fun build(): Job = Job(
+        id = id,
+        handlerId = handlerId,
+        schedule = schedule ?: error("Job \"${id.value}\" has no schedule"),
+        enabled = enabled,
+        retry = retry,
+        latePolicy = latePolicy,
+    )
 }
 
 /**

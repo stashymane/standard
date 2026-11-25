@@ -36,7 +36,7 @@ val worker = Worker(id = "api-1") {
 worker.start(scope)
 
 worker.schedule("nightly-email", EmailConfig(...)) {
-    cron("0 0 3 ? * * *")
+    schedule = cron("0 0 3 ? * * *")
     latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
     retry = RetryPolicy.Delayed(maxAttempts = 5, delay = 15.seconds)
 }
@@ -136,6 +136,26 @@ job<TimedEmailConfig> { context, config ->
 - `Schedule.Cron(expression, timeZoneId)` accepts modern seven-field cron expressions through the
   `cron` module. Day-of-week numbering is `1=SUN` through `7=SAT`, and `?`, `L`, `W`, and `#` are
   supported.
+- `Schedule.Phased(phases)` switches between schedules over time. A phase applies from its start
+  until the next one begins and never schedules an occurrence at or after that point; the first
+  phase is unbounded. A phase that becomes active while an occurrence is running starts its own
+  cadence.
+
+Schedules are values, so the DSL merely builds them:
+
+```kotlin
+worker.schedule("report", ReportConfig(...)) {
+    schedule = phased {
+        until(Instant.parse("2026-06-01T00:00:00Z")) { every(1.hours) }
+        until(Instant.parse("2026-07-01T00:00:00Z")) { cron("0 0 3 ? * * *", TimeZone.UTC) }
+        then { after(15.minutes) }
+    }
+}
+```
+
+`until` closes a segment at its instant and `then` opens the final, unbounded one; `schedule` must be
+assigned for the job to build. `Schedule.activeAt(instant)` resolves the innermost schedule that
+applies, which is how `LateExecutionPolicy` recognizes one-shot occurrences inside a phased schedule.
 
 Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or rescheduling rows
 outside `Worker.sync`.

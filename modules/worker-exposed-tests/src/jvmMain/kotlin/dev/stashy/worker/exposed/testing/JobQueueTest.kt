@@ -276,7 +276,7 @@ abstract class JobQueueTest {
                 }
             }
 
-            worker.schedule("job", "payload") { once(Clock.System.now()) }
+            worker.schedule("job", "payload") { schedule = once(Clock.System.now()) }
             worker.start(this)
             assertEquals("payload", withTimeout(5.seconds) { executed.await() })
             worker.stop()

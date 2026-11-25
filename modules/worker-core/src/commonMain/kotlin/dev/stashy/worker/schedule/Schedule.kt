@@ -13,8 +13,20 @@ import dev.stashy.standard.cron.Cron as CronExpression
  */
 @Serializable
 public sealed interface Schedule {
+    /**
+     * @return the first occurrence of this schedule starting from [now].
+     */
     public fun firstOccurrence(now: Instant): Instant
+
+    /**
+     * @return the next occurrence of this schedule, based on when the job was [scheduledAt] and the latest occurrence [finishedAt].
+     */
     public fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant?
+
+    /**
+     * The innermost schedule that applies at [instant].
+     */
+    public fun activeAt(instant: Instant): Schedule = this
 
     /**
      * Runs once at [at].
@@ -98,5 +110,62 @@ public sealed interface Schedule {
 
         override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? =
             expression.next(finishedAt, timeZone)
+    }
+
+    /**
+     * Switches between [phases] over time.
+     * Each phase applies from its [Phase.from] instant until the next phase starts (exclusively).
+     * The first phase is unbounded, so [phases] covers every instant.
+     */
+    @Serializable
+    @SerialName("phased")
+    public data class Phased(public val phases: List<Phase>) : Schedule {
+        @Serializable
+        public data class Phase(
+            public val from: Instant?,
+            public val schedule: Schedule,
+        )
+
+        init {
+            require(phases.isNotEmpty()) { "phases must not be empty" }
+            require(phases.first().from == null) { "the first phase must be unbounded" }
+            val starts = phases.drop(1).map(Phase::from)
+            require(starts.all { it != null }) { "only the first phase may be unbounded" }
+            require(starts.filterNotNull().zipWithNext().all { (previous, next) -> previous < next }) {
+                "phase start instants must increase"
+            }
+        }
+
+        override fun firstOccurrence(now: Instant): Instant =
+            resolve(now) { phase -> phase.firstOccurrence(now) }
+                ?: error("Phased schedule has no upcoming run")
+
+        override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? {
+            val initial: (Schedule) -> Instant? =
+                if (indexAt(scheduledAt) == indexAt(finishedAt)) {
+                    { phase -> phase.nextOccurrence(scheduledAt, finishedAt) }
+                } else {
+                    { phase -> phase.firstOccurrence(finishedAt) }
+                }
+            return resolve(finishedAt, initial)
+        }
+
+        override fun activeAt(instant: Instant): Schedule =
+            phases[indexAt(instant)].schedule.activeAt(instant)
+
+        private fun indexAt(instant: Instant): Int =
+            phases.indexOfLast { it.from == null || it.from <= instant }
+
+        private fun resolve(from: Instant, initial: (Schedule) -> Instant?): Instant? {
+            var index = indexAt(from)
+            var next = initial(phases[index].schedule)
+            while (true) {
+                val boundary = phases.getOrNull(index + 1)?.from
+                if (next != null && (boundary == null || next < boundary)) return next
+                if (boundary == null) return null
+                index++
+                next = phases[index].schedule.firstOccurrence(boundary)
+            }
+        }
     }
 }

@@ -26,6 +26,27 @@ class JobSerializationTest {
     }
 
     @Test
+    fun `phased schedule keeps its segments and boundaries`() {
+        val boundary = Instant.parse("2026-10-27T12:00:00Z")
+        val job = Job(
+            id = Job.Id("nightly"),
+            handlerId = "cleanup",
+            schedule = Schedule.Phased(
+                listOf(
+                    Schedule.Phased.Phase(null, Schedule.FixedRate(1.hours)),
+                    Schedule.Phased.Phase(boundary, Schedule.Cron("0 0 3 ? * * *", TimeZone.UTC.id)),
+                ),
+            ),
+        )
+
+        val encoded = TestJson.encodeToString(job)
+
+        assertTrue(encoded.contains("\"type\":\"phased\""))
+        assertTrue(encoded.contains("\"from\":\"2026-10-27T12:00:00Z\""))
+        assertEquals(job, TestJson.decodeFromString<Job>(encoded))
+    }
+
+    @Test
     fun `jobs round trip through json`() {
         val schedules = listOf(
             Schedule.Once(Instant.parse("2026-10-27T12:00:00Z")),
@@ -33,6 +54,12 @@ class JobSerializationTest {
             Schedule.FixedRate(1.hours),
             Schedule.FixedDelay(10.seconds),
             Schedule.Cron("0 0 3 ? * * *", TimeZone.UTC.id),
+            Schedule.Phased(
+                listOf(
+                    Schedule.Phased.Phase(null, Schedule.FixedDelay(10.seconds)),
+                    Schedule.Phased.Phase(Instant.parse("2026-10-27T12:00:00Z"), Schedule.Once(Instant.parse("2026-10-28T12:00:00Z"))),
+                ),
+            ),
         )
 
         for (schedule in schedules) {

@@ -32,7 +32,7 @@ class WorkerTest {
             job<Unit> { _, _ -> handler { runs++ } }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -78,7 +78,7 @@ class WorkerTest {
             job<Unit> { _, _ -> handler { runs++ } }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -101,7 +101,7 @@ class WorkerTest {
         }
         val at = Instant.fromEpochMilliseconds(60_000)
 
-        worker.schedule("job", Unit) { once(at) }
+        worker.schedule("job", Unit) { schedule = once(at) }
         worker.start(backgroundScope)
 
         advanceTimeBy(50.seconds)
@@ -133,7 +133,7 @@ class WorkerTest {
         }
         val at = Instant.fromEpochMilliseconds(60_000)
 
-        worker.schedule("job", Unit) { once(at) }
+        worker.schedule("job", Unit) { schedule = once(at) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -169,7 +169,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -193,7 +193,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -214,7 +214,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(Instant.fromEpochMilliseconds(60_000)) }
+        worker.schedule("job", Unit) { schedule = once(Instant.fromEpochMilliseconds(60_000)) }
         worker.start(backgroundScope)
         runCurrent()
         assertEquals(false, disposed)
@@ -248,7 +248,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertEquals(1, attempts)
@@ -283,7 +283,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertEquals(1, attempts)
@@ -316,7 +316,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
 
         runCurrent()
@@ -353,7 +353,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
 
         runCurrent()
@@ -387,7 +387,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertEquals(1, attempts)
@@ -410,7 +410,7 @@ class WorkerTest {
             job<Unit> { _, _ -> handler { runs++ } }
         }
 
-        worker.schedule("job", Unit) { every(20.seconds) }
+        worker.schedule("job", Unit) { schedule = every(20.seconds) }
         worker.start(backgroundScope)
 
         advanceTimeBy(21.seconds)
@@ -432,6 +432,66 @@ class WorkerTest {
     }
 
     @Test
+    fun `phased job switches cadence at its boundary`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val runs = mutableListOf<Instant>()
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ -> handler { runs += clock.now() } }
+        }
+
+        worker.schedule("job", Unit) {
+            schedule = phased {
+                until(Instant.fromEpochMilliseconds(30_000)) { every(10.seconds) }
+                then { every(1.minutes) }
+            }
+        }
+        worker.start(backgroundScope)
+
+        advanceTimeBy(21.seconds)
+        runCurrent()
+        assertEquals(2, runs.size)
+
+        advanceTimeBy(9.seconds)
+        runCurrent()
+        assertEquals(2, runs.size)
+
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        assertEquals(
+            listOf(10_000L, 20_000L, 90_000L).map { Instant.fromEpochMilliseconds(it) },
+            runs,
+        )
+        worker.stop()
+    }
+
+    @Test
+    fun `phased one-shot phase fails when it starts too late`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        var runs = 0
+        val worker = worker(clock, store) {
+            job<Unit> { _, _ -> handler { runs++ } }
+        }
+
+        worker.schedule("job", Unit) {
+            schedule = phased {
+                until(Instant.fromEpochMilliseconds(3_600_000)) { once(Instant.fromEpochMilliseconds(0)) }
+                then { every(1.minutes) }
+            }
+            latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
+        }
+
+        advanceTimeBy(10.seconds)
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(0, runs)
+        assertNull(store.get(Job.Id("job")))
+        worker.stop()
+    }
+
+    @Test
     fun `recurring job advances to its next occurrence after exhausting attempts`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
@@ -447,7 +507,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            every(20.seconds)
+            schedule = every(20.seconds)
             retry = RetryPolicy.Exponential(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
         }
         worker.start(backgroundScope)
@@ -528,7 +588,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            once(Instant.fromEpochMilliseconds(0))
+            schedule = once(Instant.fromEpochMilliseconds(0))
             latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
         }
 
@@ -563,7 +623,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            once(clock.now())
+            schedule = once(clock.now())
             latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
         }
         worker.start(backgroundScope)
@@ -597,7 +657,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            once(clock.now())
+            schedule = once(clock.now())
             latePolicy = LateExecutionPolicy.FailAfter(30.seconds)
         }
         worker.start(backgroundScope)
@@ -643,7 +703,7 @@ class WorkerTest {
         }
         val failure = CompletableDeferred<Throwable?>()
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         val workerJob = worker.start(scope())
         workerJob.invokeOnCompletion { failure.complete(it) }
         runCurrent()
@@ -740,7 +800,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertTrue(started.isCompleted)
@@ -761,7 +821,7 @@ class WorkerTest {
             job<Unit> { _, _ -> handler { } }
         }
 
-        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        val id = worker.schedule("job", Unit) { schedule = once(clock.now()) }
         val definition = assertNotNull(store.get(id)).definition
         val claim = assertNotNull(
             store.claim(
@@ -782,7 +842,7 @@ class WorkerTest {
         assertEquals(1, preserved.attempt)
 
         val changed = worker.schedule("job", Unit) {
-            every(1.minutes, startAt = clock.now() + 5.minutes)
+            schedule = every(1.minutes, startAt = clock.now() + 5.minutes)
         }
         assertEquals(id, changed)
         val updated = assertNotNull(store.get(id))
@@ -1129,7 +1189,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { once(Instant.fromEpochMilliseconds(60_000)) }
+        val id = worker.schedule("job", Unit) { schedule = once(Instant.fromEpochMilliseconds(60_000)) }
         worker.start(backgroundScope)
         runCurrent()
         assertFalse(disposed)
@@ -1163,7 +1223,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { once(clock.now() + 1.minutes) }
+        val id = worker.schedule("job", Unit) { schedule = once(clock.now() + 1.minutes) }
         worker.start(backgroundScope)
         runCurrent()
         assertTrue(preparing.isCompleted)
@@ -1198,7 +1258,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        val id = worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertTrue(started.isCompleted)
@@ -1229,7 +1289,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        val id = worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -1306,7 +1366,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { every(20.seconds) }
+        val id = worker.schedule("job", Unit) { schedule = every(20.seconds) }
         worker.start(backgroundScope)
         advanceTimeBy(21.seconds)
         runCurrent()
@@ -1348,7 +1408,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", "payload") { once(clock.now()) }
+        worker.schedule("job", "payload") { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -1371,7 +1431,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -1394,7 +1454,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -1415,7 +1475,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            once(Instant.fromEpochMilliseconds(0))
+            schedule = once(Instant.fromEpochMilliseconds(0))
             latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
         }
         advanceTimeBy(10.seconds)
@@ -1445,7 +1505,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            once(clock.now())
+            schedule = once(clock.now())
             latePolicy = LateExecutionPolicy.FailAfter(5.seconds)
         }
         worker.start(backgroundScope)
@@ -1490,7 +1550,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        val id = worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertTrue(started.isCompleted)
@@ -1552,7 +1612,7 @@ class WorkerTest {
             job<Unit> { _, _ -> handler { } finalizedBy { outcome -> outcomes += outcome } }
         }
 
-        worker.schedule("job", Unit) { every(20.seconds) }
+        worker.schedule("job", Unit) { schedule = every(20.seconds) }
         worker.start(backgroundScope)
         advanceTimeBy(21.seconds)
         runCurrent()
@@ -1573,7 +1633,7 @@ class WorkerTest {
         }
 
         worker.schedule("job", Unit) {
-            every(20.seconds)
+            schedule = every(20.seconds)
             retry = RetryPolicy.Exponential(maxAttempts = 1, initialDelay = 1.seconds, jitter = 0.0)
         }
         worker.start(backgroundScope)
@@ -1599,7 +1659,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(clock.now()) }
+        worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
         assertTrue(started.isCompleted)
@@ -1621,7 +1681,7 @@ class WorkerTest {
             }
         }
 
-        val id = worker.schedule("job", Unit) { once(clock.now()) }
+        val id = worker.schedule("job", Unit) { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -1642,7 +1702,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", "config") { once(clock.now()) }
+        worker.schedule("job", "config") { schedule = once(clock.now()) }
         worker.start(backgroundScope)
         runCurrent()
 
@@ -1675,7 +1735,7 @@ class WorkerTest {
             }
         }
 
-        worker.schedule("job", Unit) { once(Instant.fromEpochMilliseconds(50_000)) }
+        worker.schedule("job", Unit) { schedule = once(Instant.fromEpochMilliseconds(50_000)) }
         worker.start(backgroundScope)
         runCurrent()
 

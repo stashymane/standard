@@ -17,7 +17,7 @@ install(Workers) {
 
 application.launch {
     application.workers.schedule("nightly-email", EmailConfig(/* ... */)) {
-        cron("0 0 3 ? * * *")
+        schedule = cron("0 0 3 ? * * *")
     }
 }
 ```

@@ -29,6 +29,11 @@ public sealed interface Schedule {
     public fun activeAt(instant: Instant): Schedule = this
 
     /**
+     * @return whether [instant] is an occurrence of this schedule.
+     */
+    public fun firesAt(instant: Instant): Boolean = false
+
+    /**
      * Runs once at [at].
      */
     @Serializable
@@ -38,6 +43,7 @@ public sealed interface Schedule {
     ) : Schedule {
         override fun firstOccurrence(now: Instant): Instant = at
         override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? = null
+        override fun firesAt(instant: Instant): Boolean = instant == at
     }
 
     /**
@@ -65,6 +71,15 @@ public sealed interface Schedule {
             val intervalNanos = interval.inWholeNanoseconds
             val steps = elapsed.inWholeNanoseconds / intervalNanos + 1
             return scheduledAt + (intervalNanos * steps).nanoseconds
+        }
+
+        /**
+         * Without [startAt] the cadence is anchored where the phase starts, so every instant counts.
+         */
+        override fun firesAt(instant: Instant): Boolean {
+            val start = startAt ?: return true
+            if (instant < start) return false
+            return (instant - start).inWholeNanoseconds % interval.inWholeNanoseconds == 0L
         }
     }
 
@@ -110,11 +125,14 @@ public sealed interface Schedule {
 
         override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? =
             expression.next(finishedAt, timeZone)
+
+        override fun firesAt(instant: Instant): Boolean = expression.matches(instant, timeZone)
     }
 
     /**
      * Switches between [phases] over time.
      * Each phase applies from its [Phase.from] instant until the next phase starts (exclusively).
+     * A phase that [firesAt] its own start is scheduled at that instant.
      * The first phase is unbounded, so [phases] covers every instant.
      */
     @Serializable
@@ -153,6 +171,9 @@ public sealed interface Schedule {
         override fun activeAt(instant: Instant): Schedule =
             phases[indexAt(instant)].schedule.activeAt(instant)
 
+        override fun firesAt(instant: Instant): Boolean =
+            phases[indexAt(instant)].schedule.firesAt(instant)
+
         private fun indexAt(instant: Instant): Int =
             phases.indexOfLast { it.from == null || it.from <= instant }
 
@@ -164,7 +185,8 @@ public sealed interface Schedule {
                 if (next != null && (boundary == null || next < boundary)) return next
                 if (boundary == null) return null
                 index++
-                next = phases[index].schedule.firstOccurrence(boundary)
+                val schedule = phases[index].schedule
+                next = if (schedule.firesAt(boundary)) boundary else schedule.firstOccurrence(boundary)
             }
         }
     }
@@ -185,5 +207,8 @@ public sealed interface Schedule {
 
         override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? =
             children.mapNotNull { child -> child.nextOccurrence(scheduledAt, finishedAt) }.minOrNull()
+
+        override fun firesAt(instant: Instant): Boolean =
+            children.any { child -> child.firesAt(instant) }
     }
 }

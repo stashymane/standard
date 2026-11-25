@@ -3,7 +3,9 @@ package dev.stashy.worker.schedule
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -58,8 +60,8 @@ class PhasedTest {
     }
 
     @Test
-    fun `first occurrence is clamped to the phase that follows it`() {
-        assertEquals(start + 30.minutes, hourlyUntilBoundary.firstOccurrence(start))
+    fun `first occurrence moves to a phase that fires on its start`() {
+        assertEquals(start + 20.minutes, hourlyUntilBoundary.firstOccurrence(start))
     }
 
     @Test
@@ -71,11 +73,75 @@ class PhasedTest {
     }
 
     @Test
-    fun `next occurrence never lands on or after the boundary`() {
+    fun `the next phase takes over on its boundary`() {
         assertEquals(
-            start + 30.minutes,
+            start + 20.minutes,
             hourlyUntilBoundary.nextOccurrence(start, start + 5.minutes),
         )
+    }
+
+    @Test
+    fun `a phase that does not fire on its boundary starts after it`() {
+        val schedule = Schedule.Phased(
+            listOf(
+                Schedule.Phased.Phase(null, Schedule.FixedRate(1.hours)),
+                Schedule.Phased.Phase(boundary, Schedule.FixedDelay(10.minutes)),
+            ),
+        )
+
+        assertEquals(start + 30.minutes, schedule.nextOccurrence(start, start + 5.minutes))
+    }
+
+    @Test
+    fun `a cron phase that matches its boundary is scheduled there`() {
+        val schedule = Schedule.Phased(
+            listOf(
+                Schedule.Phased.Phase(null, Schedule.FixedRate(1.hours)),
+                Schedule.Phased.Phase(boundary, Schedule.Cron("0 */10 * ? * * *", "UTC")),
+            ),
+        )
+
+        assertEquals(boundary, schedule.nextOccurrence(start, start + 5.minutes))
+        assertEquals(start + 30.minutes, schedule.nextOccurrence(boundary, boundary))
+    }
+
+    @Test
+    fun `a cron phase that misses its boundary starts at its next match`() {
+        val schedule = Schedule.Phased(
+            listOf(
+                Schedule.Phased.Phase(null, Schedule.FixedRate(1.hours)),
+                Schedule.Phased.Phase(boundary, Schedule.Cron("0 5 * ? * * *", "UTC")),
+            ),
+        )
+
+        assertEquals(Instant.parse("2026-10-27T13:05:00Z"), schedule.nextOccurrence(start, start + 5.minutes))
+    }
+
+    @Test
+    fun `an anchored rate phase keeps its anchor`() {
+        val anchor = start + 25.minutes
+        val schedule = Schedule.Phased(
+            listOf(
+                Schedule.Phased.Phase(null, Schedule.FixedRate(1.hours)),
+                Schedule.Phased.Phase(boundary, Schedule.FixedRate(10.minutes, anchor)),
+            ),
+        )
+
+        assertEquals(anchor, schedule.nextOccurrence(start, start + 5.minutes))
+    }
+
+    @Test
+    fun `a phased schedule fires where the phase that applies does`() {
+        val schedule = Schedule.Phased(
+            listOf(
+                Schedule.Phased.Phase(null, Schedule.Cron("0 0 * ? * * *", "UTC")),
+                Schedule.Phased.Phase(boundary, Schedule.Cron("0 */10 * ? * * *", "UTC")),
+            ),
+        )
+
+        assertTrue(schedule.firesAt(start))
+        assertFalse(schedule.firesAt(start + 15.minutes))
+        assertTrue(schedule.firesAt(start + 30.minutes))
     }
 
     @Test
@@ -95,7 +161,7 @@ class PhasedTest {
             ),
         )
 
-        assertEquals(start + 20.minutes, schedule.nextOccurrence(start, start + 1.minutes))
+        assertEquals(start + 10.minutes, schedule.nextOccurrence(start, start + 1.minutes))
     }
 
     @Test

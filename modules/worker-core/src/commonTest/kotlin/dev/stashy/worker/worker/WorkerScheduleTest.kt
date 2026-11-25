@@ -130,12 +130,12 @@ class WorkerScheduleTest {
 
         advanceTimeBy(9.seconds)
         runCurrent()
-        assertEquals(2, runs.size)
+        assertEquals(3, runs.size)
 
         advanceTimeBy(60.seconds)
         runCurrent()
         assertEquals(
-            listOf(10_000L, 20_000L, 90_000L).map { Instant.fromEpochMilliseconds(it) },
+            listOf(10_000L, 20_000L, 30_000L, 90_000L).map { Instant.fromEpochMilliseconds(it) },
             runs,
         )
         worker.stop()

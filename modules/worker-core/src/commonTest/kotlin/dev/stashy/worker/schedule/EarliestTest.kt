@@ -3,7 +3,9 @@ package dev.stashy.worker.schedule
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -75,6 +77,16 @@ class EarliestTest {
         )
 
         assertEquals(schedule, schedule.activeAt(start))
+    }
+
+    @Test
+    fun `a union fires where any child does`() {
+        val schedule = Schedule.Earliest(
+            listOf(Schedule.FixedDelay(1.hours), Schedule.Cron("0 15 12 ? * * *", "UTC")),
+        )
+
+        assertTrue(schedule.firesAt(start + 15.minutes))
+        assertFalse(schedule.firesAt(start + 20.minutes))
     }
 
     @Test

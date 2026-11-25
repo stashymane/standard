@@ -3,7 +3,10 @@ package dev.stashy.worker.schedule
 import dev.stashy.standard.cron.Cron
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -65,5 +68,47 @@ class ScheduleTest {
             Instant.parse("2026-10-28T03:00:00Z"),
             schedule.firstOccurrence(now),
         )
+    }
+
+    @Test
+    fun `once fires at its instant only`() {
+        val at = Instant.parse("2026-10-27T12:00:00Z")
+        val schedule = Schedule.Once(at)
+
+        assertTrue(schedule.firesAt(at))
+        assertFalse(schedule.firesAt(at + 1.seconds))
+    }
+
+    @Test
+    fun `an anchored rate fires on its alignment`() {
+        val start = Instant.parse("2026-10-27T12:00:00Z")
+        val schedule = Schedule.FixedRate(10.minutes, start)
+
+        assertTrue(schedule.firesAt(start))
+        assertTrue(schedule.firesAt(start + 20.minutes))
+        assertFalse(schedule.firesAt(start + 20.minutes + 1.seconds))
+        assertFalse(schedule.firesAt(start - 10.minutes))
+    }
+
+    @Test
+    fun `an unanchored rate is anchored where it starts`() {
+        val at = Instant.parse("2026-10-27T12:00:00Z")
+
+        assertTrue(Schedule.FixedRate(10.minutes).firesAt(at))
+    }
+
+    @Test
+    fun `a delay does not fire on an instant`() {
+        val at = Instant.parse("2026-10-27T12:00:00Z")
+
+        assertFalse(Schedule.FixedDelay(10.minutes).firesAt(at))
+    }
+
+    @Test
+    fun `cron fires on its matches`() {
+        val schedule = Schedule.Cron("0 */10 * ? * * *", "UTC")
+
+        assertTrue(schedule.firesAt(Instant.parse("2026-10-27T12:20:00Z")))
+        assertFalse(schedule.firesAt(Instant.parse("2026-10-27T12:21:00Z")))
     }
 }

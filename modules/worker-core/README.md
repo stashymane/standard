@@ -188,9 +188,9 @@ job<TimedEmailConfig> { context, config ->
   `cron` module. Day-of-week numbering is `1=SUN` through `7=SAT`, and `?`, `L`, `W`, and `#` are
   supported.
 - `Schedule.Phased(phases)` switches between schedules over time. A phase applies from its start
-  until the next one begins and never schedules an occurrence at or after that point; the first
-  phase is unbounded. A phase that becomes active while an occurrence is running starts its own
-  cadence.
+  until the next one begins and never schedules an occurrence after that point; a phase that fires
+  on its own start is scheduled there. The first phase is unbounded. A phase that becomes active
+  while an occurrence is running starts its own cadence.
 - `Schedule.Earliest(children)` runs whenever any of its children would, taking the earliest next
   occurrence. Children keep their own cadence, so several cron windows can drive one job without
   phase boundaries.
@@ -219,6 +219,11 @@ assigned for the job to build. `Schedule.activeAt(instant)` resolves the innermo
 applies, which is how `LateExecutionPolicy` recognizes one-shot occurrences inside a phased schedule.
 A union has no single active child, so `activeAt` returns the union itself and `LateExecutionPolicy`
 does not apply to it.
+
+`Schedule.firesAt(instant)` reports whether an instant is an occurrence of a schedule: a `cron` or
+`once` that matches it, an anchored `every` that aligns with it, and any `every` without `startAt`,
+whose cadence is anchored where its phase begins. `after` never fires on an instant, because it
+waits for a completion.
 
 Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or rescheduling rows
 outside `Worker.sync`.

@@ -4,6 +4,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Instant
 import dev.stashy.standard.cron.Cron as CronExpression
 
@@ -12,18 +13,24 @@ import dev.stashy.standard.cron.Cron as CronExpression
  */
 @Serializable
 public sealed interface Schedule {
+    public fun firstOccurrence(now: Instant): Instant
+    public fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant?
+
     /**
-     * Runs once at [at]. This is the exact-instant schedule.
+     * Runs once at [at].
      */
     @Serializable
     @SerialName("once")
     public data class Once(
         public val at: Instant,
-    ) : Schedule
+    ) : Schedule {
+        override fun firstOccurrence(now: Instant): Instant = at
+        override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? = null
+    }
 
     /**
      * Runs repeatedly at a fixed interval. The first run is at [startAt], or one interval after the
-     * job is created when [startAt] is null. Missed occurrences are skipped.
+     * job is created when [startAt] is null.
      */
     @Serializable
     @SerialName("fixed-rate")
@@ -35,6 +42,17 @@ public sealed interface Schedule {
             require(interval.isFinite() && interval > Duration.ZERO) {
                 "interval must be a positive finite duration"
             }
+        }
+
+        override fun firstOccurrence(now: Instant): Instant = startAt ?: (now + interval)
+
+        override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant {
+            val elapsed = finishedAt - scheduledAt
+            if (elapsed < Duration.ZERO) return scheduledAt + interval
+
+            val intervalNanos = interval.inWholeNanoseconds
+            val steps = elapsed.inWholeNanoseconds / intervalNanos + 1
+            return scheduledAt + (intervalNanos * steps).nanoseconds
         }
     }
 
@@ -49,6 +67,9 @@ public sealed interface Schedule {
                 "interval must be a positive finite duration"
             }
         }
+
+        override fun firstOccurrence(now: Instant): Instant = now + interval
+        override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant = finishedAt + interval
     }
 
     /**
@@ -66,10 +87,16 @@ public sealed interface Schedule {
         ) : this(CronExpression.parse(expression), timeZoneId)
 
         init {
-            TimeZone.of(timeZoneId)
+            TimeZone.of(timeZoneId) //validation - throws if timezone ID is invalid
         }
 
         public val timeZone: TimeZone
             get() = TimeZone.of(timeZoneId)
+
+        override fun firstOccurrence(now: Instant): Instant =
+            expression.next(now, timeZone) ?: error("Cron expression '$expression' has no upcoming run")
+
+        override fun nextOccurrence(scheduledAt: Instant, finishedAt: Instant): Instant? =
+            expression.next(finishedAt, timeZone)
     }
 }

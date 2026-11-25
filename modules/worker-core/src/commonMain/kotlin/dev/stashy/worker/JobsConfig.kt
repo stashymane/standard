@@ -33,11 +33,6 @@ public data class JobsConfig(
     public var heartbeatInterval: Duration = Defaults.heartbeatInterval,
 
     /**
-     * Maximum claimed jobs in this block, including prepared, waiting, and executing jobs.
-     */
-    public var maxConcurrentJobs: Int = Defaults.maxConcurrentJobs,
-
-    /**
      * Default retry policy for jobs defined through this block, unless overridden by the job builder.
      */
     public var retry: RetryPolicy = Defaults.retry
@@ -48,7 +43,6 @@ public data class JobsConfig(
         public val prepareWindow: Duration = 5.seconds
         public val leaseDuration: Duration = 1.minutes
         public val heartbeatInterval: Duration = 20.seconds
-        public const val maxConcurrentJobs: Int = 8
         public val retry: RetryPolicy = RetryPolicy.Exponential()
     }
 
@@ -68,6 +62,5 @@ public data class JobsConfig(
         require(heartbeatInterval < leaseDuration) {
             "heartbeatInterval must be shorter than leaseDuration"
         }
-        require(maxConcurrentJobs > 0) { "maxConcurrentJobs must be positive" }
     }
 }

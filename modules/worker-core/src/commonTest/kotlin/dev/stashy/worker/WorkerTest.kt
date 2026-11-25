@@ -6,12 +6,16 @@ import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.LateExecutionPolicy
 import dev.stashy.worker.job.QueuedJob
 import dev.stashy.worker.job.RetryPolicy
+import dev.stashy.worker.pool.ConcurrencyPool
+import dev.stashy.worker.pool.PoolRequest
+import dev.stashy.worker.pool.pool
 import dev.stashy.worker.schedule.Schedule
 import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import dev.stashy.worker.store.memory.InMemoryJobHistory
 import dev.stashy.worker.store.memory.InMemoryJobQueue
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.test.*
 import kotlinx.serialization.serializer
 import kotlin.test.*
@@ -929,7 +933,6 @@ class WorkerTest {
                     prepareWindow = 10.seconds
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
-                    maxConcurrentJobs = 4
                     retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
@@ -989,7 +992,6 @@ class WorkerTest {
                     prepareWindow = 10.seconds
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
-                    maxConcurrentJobs = 4
                     retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
@@ -1037,7 +1039,6 @@ class WorkerTest {
                     prepareWindow = 10.seconds
                     leaseDuration = 1.minutes
                     heartbeatInterval = 20.seconds
-                    maxConcurrentJobs = 4
                     retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
                 }
             }
@@ -1053,7 +1054,7 @@ class WorkerTest {
     }
 
     @Test
-    fun `concurrency limit applies per queue`() = runTest {
+    fun `each block admits through its own pool`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val first = InMemoryJobQueue(TestJson)
         val second = InMemoryJobQueue(TestJson)
@@ -1068,21 +1069,115 @@ class WorkerTest {
             running--
         }
 
-        val worker = Worker(id = "worker") {
-            jobs(first) { job<String> { _, _ -> handler { runJob() } } }
-            jobs(second) { job<Int> { _, _ -> handler { runJob() } } }
-            config {
-                shutdownGracePeriod = 1.seconds
-                this.clock = clock
-                dispatcher = StandardTestDispatcher(testScheduler)
-                defaults {
-                    pollInterval = 10.seconds
-                    prepareWindow = 10.seconds
-                    leaseDuration = 1.minutes
-                    heartbeatInterval = 20.seconds
-                    maxConcurrentJobs = 1
-                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
-                }
+        val worker = workerWith(clock) {
+            jobs(first, pool = pool { capacity = 1 }) { job<String> { _, _ -> handler { runJob() } } }
+            jobs(second, pool = pool { capacity = 1 }) { job<Int> { _, _ -> handler { runJob() } } }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue(2, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(2, peak)
+
+        gate.complete(Unit)
+        runCurrent()
+        worker.stop()
+    }
+
+    @Test
+    fun `a pool is shared by the jobs in a block`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val gate = CompletableDeferred<Unit>()
+        var running = 0
+        var peak = 0
+
+        suspend fun runJob() {
+            running++
+            peak = maxOf(peak, running)
+            gate.await()
+            running--
+        }
+
+        val worker = workerWith(clock) {
+            jobs(store, pool = pool { capacity = 1 }) {
+                job<String> { _, _ -> handler { runJob() } }
+                job<Int> { _, _ -> handler { runJob() } }
+            }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue(2, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(1, peak)
+
+        gate.complete(Unit)
+        runCurrent()
+        worker.stop()
+    }
+
+    @Test
+    fun `a pool is shared across blocks`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val shared = pool("shared") { capacity = 1 }
+        val gate = CompletableDeferred<Unit>()
+        val executed = mutableListOf<String>()
+        var running = 0
+        var peak = 0
+
+        suspend fun runJob(config: String) {
+            executed += config
+            running++
+            peak = maxOf(peak, running)
+            gate.await()
+            running--
+        }
+
+        val worker = workerWith(clock) {
+            jobs(store, pool = shared) { job<String> { _, config -> handler { runJob(config) } } }
+            jobs(store, pool = shared) { job<Int> { _, config -> handler { runJob(config.toString()) } } }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue(2, at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(1, peak)
+        assertEquals(1, executed.size)
+
+        gate.complete(Unit)
+        runCurrent()
+
+        assertEquals(1, peak)
+        assertEquals(2, executed.size)
+        worker.stop()
+    }
+
+    @Test
+    fun `a job can use its own pool`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val gate = CompletableDeferred<Unit>()
+        var running = 0
+        var peak = 0
+
+        suspend fun runJob() {
+            running++
+            peak = maxOf(peak, running)
+            gate.await()
+            running--
+        }
+
+        val worker = workerWith(clock) {
+            jobs(store, pool = pool { capacity = 1 }) {
+                job<String> { _, _ -> handler { runJob() } }
+                job<Int>(pool = pool { capacity = 1 }) { _, _ -> handler { runJob() } }
             }
         }
 
@@ -1099,47 +1194,138 @@ class WorkerTest {
     }
 
     @Test
-    fun `concurrency limit applies per job block sharing a store`() = runTest {
+    fun `a pool permit is released when a job is cancelled`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val started = CompletableDeferred<Unit>()
+        val executed = mutableListOf<String>()
+        val worker = workerWith(clock) {
+            jobs(store, pool = pool { capacity = 1 }) {
+                job<String> { _, config ->
+                    handler {
+                        executed += config
+                        if (config == "first") {
+                            started.complete(Unit)
+                            CompletableDeferred<Unit>().await()
+                        }
+                    }
+                }
+            }
+        }
+
+        val id = worker.enqueue("first", at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+        assertTrue(started.isCompleted)
+
+        worker.enqueue("second", at = clock.now())
+        advanceTimeBy(10.seconds)
+        runCurrent()
+        assertEquals(listOf("first"), executed)
+
+        assertTrue(worker.cancel(id))
+        runCurrent()
+
+        assertEquals(listOf("first", "second"), executed)
+        worker.stop()
+    }
+
+    @Test
+    fun `a job keeps its permit while it waits for its instant`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val at = clock.now() + 5.seconds
+        val executed = mutableListOf<String>()
+        var prepared = 0
+        val worker = workerWith(clock) {
+            jobs(store, pool = pool { capacity = 1 }) {
+                job<String> { _, config ->
+                    prepared++
+                    handler { executed += config }
+                }
+            }
+        }
+
+        worker.schedule("first", "first") { schedule = once(at) }
+        worker.schedule("second", "second") { schedule = once(at) }
+        worker.start(backgroundScope)
+        runCurrent()
+
+        assertEquals(1, prepared)
+
+        advanceTimeBy(5.seconds)
+        runCurrent()
+        assertEquals(listOf("first"), executed)
+
+        advanceTimeBy(10.seconds)
+        runCurrent()
+
+        assertEquals(2, prepared)
+        assertEquals(listOf("first", "second"), executed)
+        worker.stop()
+    }
+
+    @Test
+    fun `surplus permits are returned when fewer jobs are due`() = runTest {
         val clock = SchedulerClock(testScheduler)
         val store = InMemoryJobQueue(TestJson)
         val gate = CompletableDeferred<Unit>()
         var running = 0
         var peak = 0
 
-        suspend fun runJob() {
+        suspend fun runJob(config: String) {
             running++
             peak = maxOf(peak, running)
-            gate.await()
+            if (config != "warmup") gate.await()
             running--
         }
 
-        val worker = Worker(id = "worker") {
-            jobs(store) { job<String> { _, _ -> handler { runJob() } } }
-            jobs(store) { job<Int> { _, _ -> handler { runJob() } } }
-            config {
-                shutdownGracePeriod = 1.seconds
-                this.clock = clock
-                dispatcher = StandardTestDispatcher(testScheduler)
-                defaults {
-                    pollInterval = 10.seconds
-                    prepareWindow = 10.seconds
-                    leaseDuration = 1.minutes
-                    heartbeatInterval = 20.seconds
-                    maxConcurrentJobs = 1
-                    retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
-                }
+        val worker = workerWith(clock) {
+            jobs(store, pool = pool { capacity = 2 }) {
+                job<String> { _, config -> handler { runJob(config) } }
             }
         }
 
-        worker.enqueue("first", at = clock.now())
-        worker.enqueue(2, at = clock.now())
+        worker.enqueue("warmup", at = clock.now())
         worker.start(backgroundScope)
+        runCurrent()
+        assertEquals(1, peak)
+
+        peak = 0
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue("second", at = clock.now())
+        advanceTimeBy(10.seconds)
         runCurrent()
 
         assertEquals(2, peak)
 
         gate.complete(Unit)
         runCurrent()
+        worker.stop()
+    }
+
+    @Test
+    fun `a custom pool decides admission`() = runTest {
+        val clock = SchedulerClock(testScheduler)
+        val store = InMemoryJobQueue(TestJson)
+        val custom = CountingPool(capacity = 1)
+        val executed = mutableListOf<String>()
+        val worker = workerWith(clock) {
+            jobs(store, pool = custom) {
+                job<String> { _, config -> handler { executed += config } }
+            }
+        }
+
+        worker.enqueue("first", at = clock.now())
+        worker.enqueue("second", at = clock.now())
+        worker.start(backgroundScope)
+        runCurrent()
+        advanceTimeBy(10.seconds)
+        runCurrent()
+
+        assertEquals(listOf("first", "second"), executed)
+        assertEquals(2, custom.granted)
+        assertEquals(2, custom.released)
         worker.stop()
     }
 
@@ -1781,6 +1967,45 @@ class WorkerTest {
                 CoroutineExceptionHandler { _, _ -> },
     )
 
+    private fun TestScope.workerWith(
+        clock: Clock,
+        poll: Duration = 10.seconds,
+        configure: WorkerBuilder.() -> Unit,
+    ): Worker = Worker(id = "worker") {
+        configure()
+        config {
+            shutdownGracePeriod = 1.seconds
+            this.clock = clock
+            dispatcher = StandardTestDispatcher(testScheduler)
+            defaults {
+                pollInterval = poll
+                prepareWindow = poll
+                leaseDuration = 1.minutes
+                heartbeatInterval = 20.seconds
+                retry = RetryPolicy.Exponential(maxAttempts = 3, initialDelay = 10.seconds, jitter = 0.0)
+            }
+        }
+    }
+
+    private class CountingPool(override val capacity: Int) : ConcurrencyPool {
+        override val label: String? = null
+
+        private val permits = Semaphore(capacity)
+        var granted = 0
+        var released = 0
+
+        override suspend fun admit(request: PoolRequest): Int {
+            permits.acquire()
+            granted++
+            return 1
+        }
+
+        override fun release(count: Int) {
+            released += count
+            repeat(count) { permits.release() }
+        }
+    }
+
     private fun TestScope.worker(
         clock: Clock,
         store: JobQueue<*>,
@@ -1802,7 +2027,6 @@ class WorkerTest {
                 this.prepareWindow = prepareWindow
                 leaseDuration = lease
                 heartbeatInterval = heartbeat
-                maxConcurrentJobs = 4
                 this.retry = retry
             }
         }

@@ -2,15 +2,13 @@ package dev.stashy.worker
 
 import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.internal.Queue
+import dev.stashy.worker.pool.ConcurrencyPool
+import dev.stashy.worker.pool.pool
 import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 
 /**
  * Configuration DSL for [Worker].
- *
- * Each [jobs] block binds a [JobQueue] to the handlers it may execute, optionally recording their
- * execution history. Several blocks may use the same queue, each with independent concurrency and
- * history.
  */
 public class WorkerBuilder internal constructor() {
     internal val bindings = mutableListOf<QueueBinding<*>>()
@@ -20,19 +18,15 @@ public class WorkerBuilder internal constructor() {
 
     /**
      * Registers jobs that run against [queue] and optionally records their attempts in [history].
-     *
-     * A worker may use several queues, for example a shared queue for cluster-wide work and an
-     * in-memory queue for node-local jobs. A handler may only be registered once across all blocks.
-     * [queue] may be passed to several [jobs] blocks; each block polls independently, has its own
-     * [history], and starts from the worker's [WorkerConfig.defaults], which [config] overrides.
      */
     public fun jobs(
         queue: JobQueue<*>,
         history: JobHistory? = null,
+        pool: ConcurrencyPool? = null,
         config: JobsConfig.() -> Unit = {},
         configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
-        bindings += binding(queue, history, config, configure)
+        bindings += bind(queue, history, pool ?: defaultPool(), config, configure)
     }
 
     /**
@@ -48,24 +42,30 @@ public class WorkerBuilder internal constructor() {
         bindings = bindings,
     )
 
-    private fun <P : Any> binding(
+    private fun <P : Any> bind(
         queue: JobQueue<P>,
         history: JobHistory?,
+        pool: ConcurrencyPool,
         config: JobsConfig.() -> Unit,
         configure: JobsRegistry<*>.() -> Unit,
-    ): QueueBinding<P> {
+    ): List<QueueBinding<P>> {
         val registry = JobsRegistry<P>(handlerIds)
         registry.configure()
-        return QueueBinding(queue, history, registry, config)
+        return registry.groups(pool).map { (groupPool, group) ->
+            QueueBinding(queue, history, group, groupPool, config)
+        }
     }
+
+    private fun defaultPool(): ConcurrencyPool = pool()
 }
 
 internal fun <P : Any> QueueBinding<P>.toQueue(worker: Worker, config: WorkerConfig): Queue<P> =
-    Queue(worker, queue, history, handlers, config, config.defaults.copy().apply(this.config))
+    Queue(worker, queue, history, handlers, pool, config, config.defaults.copy().apply(this.config))
 
 internal class QueueBinding<P : Any>(
     val queue: JobQueue<P>,
     val history: JobHistory?,
     val handlers: JobsRegistry<P>,
+    val pool: ConcurrencyPool,
     val config: JobsConfig.() -> Unit,
 )

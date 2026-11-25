@@ -67,7 +67,7 @@ val worker = Worker(id = "api-1") {
 ```
 
 Blocks start from the worker's defaults and may override `pollInterval`, `prepareWindow`,
-`leaseDuration`, `heartbeatInterval`, `maxConcurrentJobs`, and the default `retry` policy:
+`leaseDuration`, `heartbeatInterval`, and the default `retry` policy:
 
 ```kotlin
 config {
@@ -99,6 +99,57 @@ val worker = Worker(id = "api-1") {
 History is optional and write-only by default; `JobHistory.Readable` adds `list` for querying.
 A handler may only be registered once across all queues and blocks, and each block records to its
 configured history.
+
+## Concurrency pools
+
+How many jobs run at once is decided by a `ConcurrencyPool`, not by the block. A pool is a plain
+value, so handlers in different blocks and queues can share one budget:
+
+```kotlin
+val smtp = pool("smtp") { capacity = 4 }
+
+val worker = Worker(id = "api-1") {
+    jobs(sharedQueue, pool = smtp) {
+        job<SendEmail> { context, config -> handler { send(config) } }
+        job<SendInvite> { context, config -> handler { invite(config) } }
+    }
+    jobs(bulkQueue, pool = smtp) {
+        job<SendDigest> { context, config -> handler { send(config) } }
+    }
+}
+```
+
+A block admits through its `pool`, which defaults to an unlabeled pool with a capacity of 8. Passing
+`pool` to a single `job` gives that handler its own budget, so one block can split its handlers
+between pools. The label is only used in diagnostics; pools are compared by identity.
+
+A claimed job holds its permit until it leaves the queue, including the time it waits for its
+scheduled instant inside `prepareWindow`. A saturated pool parks its queue until a permit is returned
+or the poll interval elapses, instead of claiming and waiting.
+
+Implement `ConcurrencyPool` to decide admission differently, for example to rate limit or to serialize
+by handler:
+
+```kotlin
+class SerialPool(override val label: String?) : ConcurrencyPool {
+    override val capacity: Int = 1
+    private val permits = Semaphore(1)
+
+    override suspend fun admit(request: PoolRequest): Int {
+        permits.acquire()
+        return 1
+    }
+
+    override fun release(count: Int) {
+        repeat(count) { permits.release() }
+    }
+}
+```
+
+`admit` must be cancellation safe, must leave no permit granted when it is cancelled, and must not
+grant more than `request.want`. `request.handlerIds` and `request.queue` describe the claim it is
+admitting. A handler that enqueues work into its own pool and waits for it can deadlock, so keep
+follow-up work in a pool with spare capacity.
 
 ## Handlers
 
@@ -172,8 +223,8 @@ does not apply to it.
 Use `Schedule.firstOccurrence` and `Schedule.nextOccurrence` when inserting or rescheduling rows
 outside `Worker.sync`.
 
-`prepareWindow` should cover the time a handler needs to finish preparation. A claimed job keeps a
-slot in its block's `maxConcurrentJobs` while waiting, so that execution can start on time.
+`prepareWindow` should cover the time a handler needs to finish preparation. A claimed job keeps its
+pool permit while waiting, so that execution can start on time.
 
 ## Multi-server behavior
 

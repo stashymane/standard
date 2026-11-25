@@ -5,19 +5,13 @@ import dev.stashy.worker.Worker
 import dev.stashy.worker.WorkerConfig
 import dev.stashy.worker.WorkerLogger
 import dev.stashy.worker.handler.JobsRegistry
+import dev.stashy.worker.pool.ConcurrencyPool
 import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import kotlin.uuid.Uuid
 
 /**
  * Configuration for the Ktor [Workers] plugin.
- *
- * Jobs are registered with [jobs], which binds a handler set to a [JobQueue] and optionally records
- * their execution history. Use a database-backed queue for work shared across the cluster and an
- * in-memory queue for node-local jobs. A queue may be used by several [jobs] blocks, each with
- * independent concurrency and history.
- *
- * Jobs are scheduled through [Worker.schedule] and [Worker.enqueue] after the plugin is installed.
  */
 public class WorkersConfig {
     public var id: String = Uuid.generateV7().toString()
@@ -27,16 +21,15 @@ public class WorkersConfig {
 
     /**
      * Registers jobs that run against [queue] and optionally records their attempts in [history].
-     *
-     * A queue may be used by several blocks, each with independent concurrency and history.
      */
     public fun jobs(
         queue: JobQueue<*>,
         history: JobHistory? = null,
+        pool: ConcurrencyPool? = null,
         config: JobsConfig.() -> Unit = {},
         configure: JobsRegistry<*>.() -> Unit,
     ): Unit {
-        jobBlocks += JobBlock(queue, history, config, configure)
+        jobBlocks += JobBlock(queue, history, pool, config, configure)
     }
 
     /**
@@ -50,7 +43,7 @@ public class WorkersConfig {
         defaultLogger: () -> WorkerLogger
     ): Worker = Worker(id = id) {
         jobBlocks.forEach { block ->
-            jobs(block.queue, block.history, block.config) { block.configure(this) }
+            jobs(block.queue, block.history, block.pool, block.config) { block.configure(this) }
         }
         config {
             configBlocks.forEach { block -> block(this) }
@@ -62,6 +55,7 @@ public class WorkersConfig {
     private class JobBlock(
         val queue: JobQueue<*>,
         val history: JobHistory?,
+        val pool: ConcurrencyPool?,
         val config: JobsConfig.() -> Unit,
         val configure: JobsRegistry<*>.() -> Unit,
     )

@@ -7,21 +7,28 @@ import dev.stashy.worker.WorkerLogger
 import dev.stashy.worker.handler.JobsRegistry
 import dev.stashy.worker.job.Job
 import dev.stashy.worker.job.QueuedJob
+import dev.stashy.worker.log
+import dev.stashy.worker.pool.ConcurrencyPool
+import dev.stashy.worker.pool.PoolRequest
+import dev.stashy.worker.pool.describe
 import dev.stashy.worker.store.JobHistory
 import dev.stashy.worker.store.JobQueue
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.getAndUpdate
 import kotlinx.atomicfu.update
 import kotlinx.coroutines.*
 import kotlinx.coroutines.Job as CoroutineJob
 
 /**
- * A [JobQueue], its optional [JobHistory], and the handlers it may execute.
+ * A [JobQueue], its optional [JobHistory], the handlers it may execute, and the [ConcurrencyPool]
+ * that budget their execution.
  */
 internal class Queue<P : Any>(
     private val worker: Worker,
     val store: JobQueue<P>,
     private val history: JobHistory?,
     val handlers: JobsRegistry<P>,
+    private val pool: ConcurrencyPool,
     private val workerConfig: WorkerConfig,
     val config: JobsConfig,
 ) {
@@ -81,11 +88,15 @@ internal class Queue<P : Any>(
     }
 
     fun clearExecutions(): Unit {
-        inFlight.value = emptyMap()
+        inFlight.getAndUpdate { emptyMap() }.values.forEach { it.releaseSlot() }
     }
 
     private fun purgeCompleted(): Unit {
-        inFlight.update { current -> current.filterValues { !it.coroutine.isCompleted } }
+        for ((id, execution) in inFlight.value) {
+            if (!execution.coroutine.isCompleted) continue
+            inFlight.update { current -> current - id }
+            execution.releaseSlot()
+        }
     }
 
     private suspend fun sweepExpired(): Unit {
@@ -108,8 +119,28 @@ internal class Queue<P : Any>(
         val handlerIds = handlers.ids()
         if (handlerIds.isEmpty()) return
 
-        val available = config.maxConcurrentJobs - inFlight.value.size
-        if (available <= 0) return
+        val granted = try {
+            withTimeoutOrNull(config.pollInterval) {
+                pool.admit(PoolRequest(pool.capacity, handlerIds, store))
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            workerConfig.logger.log(
+                WorkerLogger.Level.ERROR,
+                "Could not admit jobs through the ${pool.describe()}",
+                error,
+            )
+            return
+        } ?: return
+        val admitted = granted.coerceIn(0, pool.capacity)
+        if (admitted != granted) {
+            workerConfig.logger.log(
+                WorkerLogger.Level.ERROR,
+                "The ${pool.describe()} granted $granted permits for a request of ${pool.capacity}",
+            )
+        }
+        if (admitted == 0) return
 
         val claimed = try {
             store.claim(
@@ -120,26 +151,32 @@ internal class Queue<P : Any>(
                     lease = config.leaseDuration,
                     workerId = worker.id,
                 ),
-                limit = available,
+                limit = admitted,
             )
         } catch (cancelled: CancellationException) {
+            pool.release(admitted)
             throw cancelled
         } catch (error: Exception) {
             workerConfig.logger.log(WorkerLogger.Level.ERROR, "Could not claim worker jobs", error)
+            pool.release(admitted)
             return
         }
 
+        if (claimed.size < admitted) pool.release(admitted - claimed.size)
+
         for (claim in claimed) {
             val started = CompletableDeferred<Unit>()
-            val execution = executionScope.launch(start = CoroutineStart.LAZY) {
-                executor.execute(claim, started)
-            }
-            inFlight.update { current ->
-                current + (claim.job.definition.id to Execution(execution, started) { reason ->
-                    executor.release(claim, reason)
-                })
-            }
-            execution.start()
+            val execution = Execution(
+                coroutine = executionScope.launch(start = CoroutineStart.LAZY) {
+                    executor.execute(claim, started)
+                },
+                started = started,
+                pool = pool,
+                release = { reason -> executor.release(claim, reason) },
+            )
+            execution.coroutine.invokeOnCompletion { execution.releaseSlot() }
+            inFlight.update { current -> current + (claim.job.definition.id to execution) }
+            execution.coroutine.start()
         }
     }
 
@@ -147,5 +184,12 @@ internal class Queue<P : Any>(
         val coroutine: CoroutineJob,
         val started: CompletableDeferred<Unit>,
         val release: suspend (reason: String) -> Unit,
-    )
+        private val pool: ConcurrencyPool,
+    ) {
+        private val holdsSlot = atomic(true)
+
+        fun releaseSlot() {
+            if (holdsSlot.compareAndSet(expect = true, update = false)) pool.release(1)
+        }
+    }
 }

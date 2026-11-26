@@ -2,13 +2,14 @@ package dev.stashy.standard.ui.components.scroll
 
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Stable
 import kotlin.math.abs
 
 /**
- * Estimates lazy list content size from the size of currently visible items, as items that
- * haven't been composed yet have no known size.
+ * Estimates lazy list scroll metrics from the sizes of composed items, extrapolating
+ * not-yet-composed items with a running average of all measured sizes.
  */
 @Stable
 internal class LazyListStateAdapter(
@@ -17,6 +18,17 @@ internal class LazyListStateAdapter(
     private val layoutInfo
         get() = lazyListState.layoutInfo
 
+    private val measuredSizes = HashMap<Int, Int>()
+    private var measuredSizeSum = 0L
+    private var measuredCount = 0
+
+    private var cachedLayoutInfo: LazyListLayoutInfo? = null
+    private var cachedContentSize = 0.0
+    private var cachedOffset = 0.0
+
+    private val runningAverageItemSize: Double
+        get() = if (measuredCount == 0) 0.0 else measuredSizeSum.toDouble() / measuredCount
+
     override val viewportSize: Int
         get() {
             val size = layoutInfo.viewportSize
@@ -24,14 +36,16 @@ internal class LazyListStateAdapter(
         }
 
     override val maxValue: Double
-        get() = (contentSize - viewportSize).coerceAtLeast(0.0)
+        get() {
+            refresh()
+            return (cachedContentSize - viewportSize).coerceAtLeast(0.0)
+        }
 
     override val value: Double
         get() {
-            val firstVisibleItem = firstVisibleItem() ?: return 0.0
-            val offset = firstVisibleItem.index * averageItemSizeWithSpacing - firstVisibleItem.offset
+            refresh()
             val visualOffset =
-                if (layoutInfo.reverseLayout) contentSize - viewportSize - offset else offset
+                if (layoutInfo.reverseLayout) cachedContentSize - viewportSize - cachedOffset else cachedOffset
             return visualOffset.coerceIn(0.0, maxValue)
         }
 
@@ -50,23 +64,71 @@ internal class LazyListStateAdapter(
     }
 
     private suspend fun snapTo(value: Double) {
-        val itemCount = layoutInfo.totalItemsCount
-        val itemSize = averageItemSizeWithSpacing
+        val info = layoutInfo
+        val itemCount = info.totalItemsCount
+        val itemSize = runningAverageItemSize + info.mainAxisItemSpacing
         if (itemCount == 0 || itemSize <= 0.0) return
 
         val target = value.coerceIn(0.0, maxValue)
-        val targetOffset = if (layoutInfo.reverseLayout) contentSize - viewportSize - target else target
-        val index = (targetOffset / itemSize).toInt().coerceIn(0, itemCount - 1)
-        val offsetInItem = (targetOffset - index * itemSize).toInt().coerceAtLeast(0)
+        val targetOffset = if (info.reverseLayout) contentSize - viewportSize - target else target
+        val index = ((targetOffset - info.beforeContentPadding) / itemSize).toInt().coerceIn(0, itemCount - 1)
+        val offsetInItem = (targetOffset - estimatedOffset(index)).toInt().coerceAtLeast(0)
         lazyListState.scrollToItem(index, offsetInItem)
     }
+
+    private fun refresh() {
+        val info = layoutInfo
+        if (cachedLayoutInfo === info) return
+
+        for (item in info.visibleItemsInfo) {
+            val previous = measuredSizes.put(item.index, item.size)
+            if (previous == null) {
+                measuredCount++
+                measuredSizeSum += item.size
+            } else {
+                measuredSizeSum += item.size - previous
+            }
+        }
+
+        cachedContentSize = estimatedOffset(info.totalItemsCount) + info.afterContentPadding
+        val first = firstVisibleItem()
+        cachedOffset = if (first == null) 0.0 else estimatedOffset(first.index) - first.offset
+        cachedLayoutInfo = info
+    }
+
+    /**
+     * Estimated main-axis offset of the start of the item at [index] in content coordinates:
+     * exact for composed items via their measured sizes, extrapolated with the running average
+     * for the rest.
+     */
+    private fun estimatedOffset(index: Int): Double {
+        val info = layoutInfo
+        var measuredSum = 0
+        var measuredBelow = 0
+        for ((itemIndex, size) in measuredSizes) {
+            if (itemIndex < index) {
+                measuredSum += size
+                measuredBelow++
+            }
+        }
+        return info.beforeContentPadding +
+            measuredSum +
+            runningAverageItemSize * (index - measuredBelow) +
+            info.mainAxisItemSpacing * index.toDouble()
+    }
+
+    private val contentSize: Double
+        get() {
+            refresh()
+            return cachedContentSize
+        }
 
     private class VisibleItem(val index: Int, val offset: Int)
 
     /**
      * Index into the visible items of the first item that isn't a sticky header currently pinned to
      * the start. Pinned headers always count as visible and would otherwise distort the first
-     * visible index and the average item size.
+     * visible index.
      */
     private fun firstFloatingVisibleItemIndex(): Int? {
         val items = layoutInfo.visibleItemsInfo
@@ -89,27 +151,4 @@ internal class LazyListStateAdapter(
         val item = layoutInfo.visibleItemsInfo[index]
         return VisibleItem(item.index, item.offset)
     }
-
-    private fun averageVisibleItemSize(): Double {
-        val firstIndex = firstFloatingVisibleItemIndex() ?: return 0.0
-        val items = layoutInfo.visibleItemsInfo
-        val first = items[firstIndex]
-        val last = items.last()
-        val count = items.size - firstIndex
-        return (last.offset + last.size - first.offset -
-            (count - 1) * layoutInfo.mainAxisItemSpacing).toDouble() / count
-    }
-
-    private val averageItemSizeWithSpacing: Double
-        get() = averageVisibleItemSize() + layoutInfo.mainAxisItemSpacing
-
-    private val contentSize: Double
-        get() {
-            val info = layoutInfo
-            val itemCount = info.totalItemsCount
-            val contentPadding = info.beforeContentPadding + info.afterContentPadding
-            return averageVisibleItemSize() * itemCount +
-                info.mainAxisItemSpacing * (itemCount - 1).coerceAtLeast(0) +
-                contentPadding
-        }
 }

@@ -16,20 +16,27 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.stashy.standard.samples.gallery.theme.GalleryTheme
+import dev.stashy.standard.ui.components.scroll.VerticalScrollbar
 
 /** Scrollable page layout shared by the sample screens. */
 @Composable
 internal fun SampleContent(
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-        content = content,
-    )
+    val scrollState = rememberScrollState()
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(24.dp)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            content = content,
+        )
+        VerticalScrollbar(scrollState, Modifier.align(Alignment.CenterEnd))
+    }
 }
 
 /** A titled, visually separated block inside a sample screen. */

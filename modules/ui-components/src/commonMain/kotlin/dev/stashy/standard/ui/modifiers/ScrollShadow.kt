@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +26,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.stashy.standard.ui.components.scroll.VerticalScrollbar
 import dev.stashy.standard.ui.gradients.easedVerticalGradient
 import dev.stashy.standard.ui.gradients.stop
 import dev.stashy.standard.ui.gradients.toEasingFunction
@@ -148,23 +150,27 @@ private fun VerticalScrollShadowPreview(
 ) = Surface {
     val scrollState = rememberScrollState(initial = offset)
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-            .verticalScrollShadow(scrollState)
-            .verticalScroll(scrollState)
-            .padding(12.dp),
-    ) {
-        repeat(20) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(30.dp)
-                    .padding(2.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainer),
-            )
+    Box(Modifier.fillMaxWidth().height(200.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScrollShadow(scrollState)
+                .verticalScroll(scrollState)
+                .padding(12.dp)
+                .padding(end = 8.dp),
+        ) {
+            repeat(20) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(30.dp)
+                        .padding(2.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainer),
+                )
+            }
         }
+
+        VerticalScrollbar(scrollState, Modifier.align(Alignment.CenterEnd))
     }
 }
 

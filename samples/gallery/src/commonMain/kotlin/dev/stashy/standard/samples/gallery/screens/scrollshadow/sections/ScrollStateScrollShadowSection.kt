@@ -31,7 +31,7 @@ internal fun ScrollStateScrollShadowSection() {
                     .verticalScrollShadow(state)
                     .verticalScroll(state)
                     .padding(12.dp)
-                    .padding(end = 8.dp),
+                    .padding(end = 12.dp),
             ) {
                 repeat(20) { index -> SampleItem(index) }
             }

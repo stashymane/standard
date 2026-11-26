@@ -20,7 +20,7 @@ internal fun VerticalScrollStateSection() {
 
         Box(Modifier.heightIn(max = 260.dp).align(Alignment.CenterHorizontally)) {
             Column(
-                Modifier.fillMaxSize().padding(end = 8.dp).verticalScroll(state),
+                Modifier.fillMaxSize().padding(end = 12.dp).verticalScroll(state),
             ) {
                 repeat(1000) { index -> SampleItem(index) }
             }

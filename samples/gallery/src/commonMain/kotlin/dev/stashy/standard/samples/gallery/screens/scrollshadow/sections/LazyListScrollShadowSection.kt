@@ -31,7 +31,7 @@ internal fun LazyListScrollShadowSection() {
                     .fillMaxSize()
                     .verticalScrollShadow(state)
                     .padding(horizontal = 12.dp)
-                    .padding(end = 8.dp),
+                    .padding(end = 12.dp),
                 state = state,
             ) {
                 items(40) { index -> SampleItem(index) }

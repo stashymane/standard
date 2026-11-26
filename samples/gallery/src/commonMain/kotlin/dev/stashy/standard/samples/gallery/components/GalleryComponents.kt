@@ -31,7 +31,7 @@ internal fun SampleContent(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(24.dp)
-                .padding(end = 8.dp),
+                .padding(end = 12.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
             content = content,
         )

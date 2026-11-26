@@ -19,7 +19,7 @@ internal fun HorizontalScrollStateSection() {
 
         Box(Modifier.heightIn(max = 100.dp).align(Alignment.CenterHorizontally)) {
             Row(
-                Modifier.fillMaxSize().padding(bottom = 8.dp).horizontalScroll(state),
+                Modifier.fillMaxSize().padding(bottom = 12.dp).horizontalScroll(state),
             ) {
                 repeat(1000) { index -> SampleCell(index) }
             }

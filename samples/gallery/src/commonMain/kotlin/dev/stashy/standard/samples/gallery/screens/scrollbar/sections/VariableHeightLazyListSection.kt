@@ -20,7 +20,7 @@ internal fun VariableHeightLazyListSection() {
 
         Box(Modifier.heightIn(max = 260.dp).align(Alignment.CenterHorizontally)) {
             LazyColumn(
-                Modifier.fillMaxSize().padding(end = 8.dp),
+                Modifier.fillMaxSize().padding(end = 12.dp),
                 state = state,
             ) {
                 items(50) { index -> SampleItem(index, (32 + (index % 5) * 256).dp) }

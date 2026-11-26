@@ -23,15 +23,13 @@ import androidx.compose.ui.unit.dp
 public fun VerticalScrollbar(
     scrollbarState: ScrollbarState,
     modifier: Modifier = Modifier,
-    collapsedWidth: Dp = ScrollbarThicknessCollapsed,
-    expandedWidth: Dp = ScrollbarThicknessExpanded,
+    width: Dp = ScrollbarThickness,
 ) {
     Scrollbar(
         scrollbarState = scrollbarState,
         isVertical = true,
         modifier = modifier,
-        collapsedThickness = collapsedWidth,
-        expandedThickness = expandedWidth,
+        thickness = width,
     )
 }
 
@@ -39,14 +37,12 @@ public fun VerticalScrollbar(
 public fun VerticalScrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    collapsedWidth: Dp = ScrollbarThicknessCollapsed,
-    expandedWidth: Dp = ScrollbarThicknessExpanded,
+    width: Dp = ScrollbarThickness,
 ) {
     VerticalScrollbar(
         scrollbarState = rememberScrollbarState(scrollState),
         modifier = modifier,
-        collapsedWidth = collapsedWidth,
-        expandedWidth = expandedWidth,
+        width = width,
     )
 }
 
@@ -54,14 +50,12 @@ public fun VerticalScrollbar(
 public fun VerticalScrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
-    collapsedWidth: Dp = ScrollbarThicknessCollapsed,
-    expandedWidth: Dp = ScrollbarThicknessExpanded,
+    width: Dp = ScrollbarThickness,
 ) {
     VerticalScrollbar(
         scrollbarState = rememberScrollbarState(lazyListState),
         modifier = modifier,
-        collapsedWidth = collapsedWidth,
-        expandedWidth = expandedWidth,
+        width = width,
     )
 }
 

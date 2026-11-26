@@ -19,7 +19,7 @@ internal fun HorizontalLazyListSection() {
 
         Box(Modifier.heightIn(max = 100.dp).align(Alignment.CenterHorizontally)) {
             LazyRow(
-                Modifier.fillMaxSize().padding(bottom = 8.dp),
+                Modifier.fillMaxSize().padding(bottom = 12.dp),
                 state = state,
             ) {
                 items(1_000) { index -> SampleCell(index) }

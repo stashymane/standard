@@ -25,15 +25,13 @@ import androidx.compose.ui.unit.dp
 public fun HorizontalScrollbar(
     scrollbarState: ScrollbarState,
     modifier: Modifier = Modifier,
-    collapsedHeight: Dp = ScrollbarThicknessCollapsed,
-    expandedHeight: Dp = ScrollbarThicknessExpanded,
+    height: Dp = ScrollbarThickness,
 ) {
     Scrollbar(
         scrollbarState = scrollbarState,
         isVertical = false,
         modifier = modifier,
-        collapsedThickness = collapsedHeight,
-        expandedThickness = expandedHeight,
+        thickness = height,
     )
 }
 
@@ -41,14 +39,12 @@ public fun HorizontalScrollbar(
 public fun HorizontalScrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    collapsedHeight: Dp = ScrollbarThicknessCollapsed,
-    expandedHeight: Dp = ScrollbarThicknessExpanded,
+    height: Dp = ScrollbarThickness,
 ) {
     HorizontalScrollbar(
         scrollbarState = rememberScrollbarState(scrollState),
         modifier = modifier,
-        collapsedHeight = collapsedHeight,
-        expandedHeight = expandedHeight,
+        height = height,
     )
 }
 
@@ -56,14 +52,12 @@ public fun HorizontalScrollbar(
 public fun HorizontalScrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
-    collapsedHeight: Dp = ScrollbarThicknessCollapsed,
-    expandedHeight: Dp = ScrollbarThicknessExpanded,
+    height: Dp = ScrollbarThickness,
 ) {
     HorizontalScrollbar(
         scrollbarState = rememberScrollbarState(lazyListState),
         modifier = modifier,
-        collapsedHeight = collapsedHeight,
-        expandedHeight = expandedHeight,
+        height = height,
     )
 }
 

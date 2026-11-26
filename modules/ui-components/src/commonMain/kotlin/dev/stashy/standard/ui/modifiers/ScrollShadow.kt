@@ -157,7 +157,7 @@ private fun VerticalScrollShadowPreview(
                 .verticalScrollShadow(scrollState)
                 .verticalScroll(scrollState)
                 .padding(12.dp)
-                .padding(end = 8.dp),
+                .padding(end = 12.dp),
         ) {
             repeat(20) {
                 Box(

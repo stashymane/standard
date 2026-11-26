@@ -10,8 +10,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.stashy.standard.samples.gallery.theme.GalleryTheme
 
@@ -54,14 +56,21 @@ internal fun Section(
 
 /** A simple list item used by the scrollable samples. */
 @Composable
-internal fun SampleItem(index: Int) {
+internal fun SampleItem(index: Int, height: Dp = 64.dp) {
     Column(
         Modifier
             .fillMaxWidth()
             .padding(2.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainer),
+            .height(height)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Item $index", Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+        Text(
+            "Item $index",
+            Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge
+        )
     }
 }
 

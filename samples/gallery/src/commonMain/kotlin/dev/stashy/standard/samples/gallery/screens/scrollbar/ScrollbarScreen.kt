@@ -6,6 +6,7 @@ import dev.stashy.standard.samples.gallery.GalleryScreen
 import dev.stashy.standard.samples.gallery.components.SampleContent
 import dev.stashy.standard.samples.gallery.screens.scrollbar.sections.HorizontalLazyListSection
 import dev.stashy.standard.samples.gallery.screens.scrollbar.sections.HorizontalScrollStateSection
+import dev.stashy.standard.samples.gallery.screens.scrollbar.sections.VariableHeightLazyListSection
 import dev.stashy.standard.samples.gallery.screens.scrollbar.sections.VerticalLazyListSection
 import dev.stashy.standard.samples.gallery.screens.scrollbar.sections.VerticalScrollStateSection
 import dev.stashy.standard.samples.gallery.theme.GalleryTheme
@@ -22,6 +23,7 @@ internal class ScrollbarScreen : GalleryScreen {
         SampleContent {
             VerticalScrollStateSection()
             VerticalLazyListSection()
+            VariableHeightLazyListSection()
             HorizontalScrollStateSection()
             HorizontalLazyListSection()
         }

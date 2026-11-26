@@ -1,4 +1,4 @@
-package dev.stashy.standard.samples.gallery.home
+package dev.stashy.standard.samples.gallery.screens.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

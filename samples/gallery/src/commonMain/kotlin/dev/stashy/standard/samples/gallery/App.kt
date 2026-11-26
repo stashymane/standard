@@ -32,7 +32,7 @@ import dev.stashy.navigation.compose.rememberEntryStateNavEntryDecorator
 import dev.stashy.navigation.compose.rememberNavigationState
 import dev.stashy.navigation.compose.rememberNavigator
 import dev.stashy.navigation.ui.rememberNavigatorSceneDecorator
-import dev.stashy.standard.samples.gallery.home.HomeScreen
+import dev.stashy.standard.samples.gallery.screens.home.HomeScreen
 import dev.stashy.standard.samples.gallery.sidebar.Sidebar
 import dev.stashy.standard.samples.gallery.theme.GalleryTheme
 import org.koin.compose.KoinApplication

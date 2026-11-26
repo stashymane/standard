@@ -1,12 +1,7 @@
 package dev.stashy.standard.samples.gallery.screens.scrollbar.sections
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,7 +17,7 @@ internal fun HorizontalLazyListSection() {
     Section("Horizontal · LazyListState") {
         val state = rememberLazyListState()
 
-        Box(Modifier.size(320.dp, 110.dp).align(Alignment.CenterHorizontally)) {
+        Box(Modifier.heightIn(max = 100.dp).align(Alignment.CenterHorizontally)) {
             LazyRow(
                 Modifier.fillMaxSize().padding(bottom = 8.dp),
                 state = state,

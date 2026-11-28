@@ -63,7 +63,7 @@ internal fun Scrollbar(
     val active = hovered || dragging
     val color by animateColorAsState(if (active) style.activeThumbColor else style.thumbColor)
     val gutterColor by animateColorAsState(
-        if (hovered) style.gutterColor else Color.Transparent
+        if (active) style.gutterColor else Color.Transparent
     )
 
     if (scrollbarState.maxValue <= 0.0) return

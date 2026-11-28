@@ -7,8 +7,6 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,7 +17,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -54,7 +52,7 @@ internal fun Scrollbar(
     scrollbarState: ScrollbarState,
     isVertical: Boolean,
     modifier: Modifier = Modifier,
-    thickness: Dp = ScrollbarThickness,
+    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.defaults()
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
@@ -63,21 +61,19 @@ internal fun Scrollbar(
     val hovered by interactionSource.collectIsHoveredAsState()
     var dragging by remember { mutableStateOf(false) }
     val active = hovered || dragging
-    val color by animateColorAsState(
-        MaterialTheme.colorScheme.outline.copy(alpha = if (active) 0.4f else 0.2f)
-    )
+    val color by animateColorAsState(if (active) style.activeThumbColor else style.thumbColor)
     val gutterColor by animateColorAsState(
-        if (hovered) MaterialTheme.colorScheme.outline.copy(alpha = 0.1f) else Color.Transparent
+        if (hovered) style.gutterColor else Color.Transparent
     )
 
     if (scrollbarState.maxValue <= 0.0) return
 
     val trackModifier = if (isVertical) {
-        Modifier.width(thickness * 2).fillMaxHeight()
+        Modifier.width(style.thickness * 2).fillMaxHeight()
     } else {
-        Modifier.height(thickness * 2).fillMaxWidth()
+        Modifier.height(style.thickness * 2).fillMaxWidth()
     }
-    val thumbModifier = if (isVertical) Modifier.width(thickness) else Modifier.height(thickness)
+    val thumbModifier = if (isVertical) Modifier.width(style.thickness) else Modifier.height(style.thickness)
 
     Box(
         modifier = modifier
@@ -171,13 +167,15 @@ internal fun Scrollbar(
             content = {
                 Box(
                     thumbModifier
-                        .clip(RoundedCornerShape(50))
+                        .clip(style.shape)
                         .background(color)
                 )
             }
         ) { measurables, constraints ->
-            val trackSize =
-                if (isVertical) constraints.maxHeight else constraints.maxWidth
+            val mainAxisMax = if (isVertical) constraints.maxHeight else constraints.maxWidth
+            val crossAxisMax = if (isVertical) constraints.maxWidth else constraints.maxHeight
+            val mainAxisUnbounded = mainAxisMax == Constraints.Infinity
+            val trackSize = if (mainAxisUnbounded) 0 else mainAxisMax
             val contentSize = scrollbarState.maxValue + scrollbarState.viewportSize
             val (thumbSize, thumbOffset) = computeThumb(
                 trackSize,
@@ -194,16 +192,24 @@ internal fun Scrollbar(
                     constraints.copy(minWidth = thumbSizePx, maxWidth = thumbSizePx)
                 }
             )
-            layout(constraints.maxWidth, constraints.maxHeight) {
+            val mainSize = if (mainAxisUnbounded) thumbSizePx else mainAxisMax
+            val crossSize = if (crossAxisMax == Constraints.Infinity) {
+                if (isVertical) thumbPlaceable.width else thumbPlaceable.height
+            } else crossAxisMax
+            
+            layout(
+                if (isVertical) crossSize else mainSize,
+                if (isVertical) mainSize else crossSize,
+            ) {
                 if (isVertical) {
                     thumbPlaceable.placeRelative(
-                        (constraints.maxWidth - thumbPlaceable.width) / 2,
+                        (crossSize - thumbPlaceable.width) / 2,
                         thumbOffsetPx,
                     )
                 } else {
                     thumbPlaceable.placeRelative(
                         thumbOffsetPx,
-                        (constraints.maxHeight - thumbPlaceable.height) / 2,
+                        (crossSize - thumbPlaceable.height) / 2,
                     )
                 }
             }

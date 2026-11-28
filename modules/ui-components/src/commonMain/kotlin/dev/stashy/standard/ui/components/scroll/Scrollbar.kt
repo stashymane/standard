@@ -13,16 +13,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.roundToInt
 
 internal val ScrollbarThickness = 6.dp
 
@@ -140,6 +143,25 @@ internal fun Scrollbar(
                             }
                         }
                         dragging = false
+                    }
+                }
+            }
+            .pointerInput(scrollbarState, isVertical) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Scroll) {
+                            val delta = event.changes.fold(Offset.Zero) { acc, change -> acc + change.scrollDelta }
+                            val amount = if (isVertical) delta.y else delta.x
+                            if (amount != 0f) {
+                                event.changes.forEach(PointerInputChange::consume)
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    dragMutex.withLock {
+                                        scrollbarState.scrollTo(scrollbarState.value + amount)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             },

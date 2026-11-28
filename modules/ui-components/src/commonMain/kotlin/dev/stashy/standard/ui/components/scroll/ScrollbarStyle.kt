@@ -26,12 +26,20 @@ public data class ScrollbarStyle(
     public val shape: Shape,
 ) {
     public companion object {
+        public val Basic: ScrollbarStyle = ScrollbarStyle(
+            thumbColor = Color.White.copy(alpha = 0.25f),
+            activeThumbColor = Color.White.copy(alpha = 0.5f),
+            gutterColor = Color.Black.copy(alpha = 0.1f),
+            thickness = ScrollbarDefaults.thickness,
+            shape = ScrollbarDefaults.shape,
+        )
+
         @Composable
-        public fun defaults(
-            thumbColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-            activeThumbColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-            gutterColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-            thickness: Dp = ScrollbarThickness,
+        public fun default(
+            thumbColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+            activeThumbColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+            gutterColor: Color = MaterialTheme.colorScheme.background.copy(alpha = 0.25f),
+            thickness: Dp = ScrollbarDefaults.thickness,
             shape: Shape = RoundedCornerShape(50),
         ): ScrollbarStyle = ScrollbarStyle(
             thumbColor = thumbColor,
@@ -43,13 +51,18 @@ public data class ScrollbarStyle(
     }
 }
 
-public val LocalScrollbarStyle: ProvidableCompositionLocal<ScrollbarStyle?> =
-    compositionLocalOf { null }
+public object ScrollbarDefaults {
+    public val thickness: Dp = 6.dp
+    public val shape: Shape = RoundedCornerShape(50)
+}
+
+public val LocalScrollbarStyle: ProvidableCompositionLocal<ScrollbarStyle> =
+    compositionLocalOf { ScrollbarStyle.Basic }
 
 @Preview
 @Composable
 private fun ScrollbarStylePreview() {
-    val style = ScrollbarStyle.defaults(
+    val style = ScrollbarStyle.default(
         thumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
         activeThumbColor = MaterialTheme.colorScheme.primary,
         gutterColor = MaterialTheme.colorScheme.primaryContainer,

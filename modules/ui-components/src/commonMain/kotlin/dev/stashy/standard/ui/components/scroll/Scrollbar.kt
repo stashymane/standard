@@ -12,20 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.roundToInt
-
-internal val ScrollbarThickness = 6.dp
 
 private const val MinThumbSizePx = 16
 
@@ -52,7 +48,7 @@ internal fun Scrollbar(
     scrollbarState: ScrollbarState,
     isVertical: Boolean,
     modifier: Modifier = Modifier,
-    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.defaults()
+    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.default()
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
@@ -63,7 +59,7 @@ internal fun Scrollbar(
     val active = hovered || dragging
     val color by animateColorAsState(if (active) style.activeThumbColor else style.thumbColor)
     val gutterColor by animateColorAsState(
-        if (active) style.gutterColor else Color.Transparent
+        if (active) style.gutterColor else style.gutterColor.copy(alpha = 0f)
     )
 
     if (scrollbarState.maxValue <= 0.0) return
@@ -196,7 +192,7 @@ internal fun Scrollbar(
             val crossSize = if (crossAxisMax == Constraints.Infinity) {
                 if (isVertical) thumbPlaceable.width else thumbPlaceable.height
             } else crossAxisMax
-            
+
             layout(
                 if (isVertical) crossSize else mainSize,
                 if (isVertical) mainSize else crossSize,

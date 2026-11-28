@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 public fun HorizontalScrollbar(
     scrollbarState: ScrollbarState,
     modifier: Modifier = Modifier,
-    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.defaults()
+    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.default()
 ) {
     Scrollbar(
         scrollbarState = scrollbarState,
@@ -31,7 +31,7 @@ public fun HorizontalScrollbar(
 public fun HorizontalScrollbar(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
-    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.defaults()
+    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.default()
 ) {
     HorizontalScrollbar(
         scrollbarState = rememberScrollbarState(scrollState),
@@ -44,7 +44,7 @@ public fun HorizontalScrollbar(
 public fun HorizontalScrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
-    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.defaults()
+    style: ScrollbarStyle = LocalScrollbarStyle.current ?: ScrollbarStyle.default()
 ) {
     HorizontalScrollbar(
         scrollbarState = rememberScrollbarState(lazyListState),

@@ -18,12 +18,12 @@ internal fun VariableHeightLazyListSection() {
     Section("Vertical · LazyListState · Variable heights") {
         val state = rememberLazyListState()
 
-        Box(Modifier.heightIn(max = 260.dp).align(Alignment.CenterHorizontally)) {
+        Box(Modifier.height(260.dp).align(Alignment.CenterHorizontally)) {
             LazyColumn(
                 Modifier.fillMaxSize().padding(end = 12.dp),
                 state = state,
             ) {
-                items(50) { index -> SampleItem(index, (32 + (index % 5) * 256).dp) }
+                items(50) { index -> SampleItem(index, Modifier.height((32 + (index % 5) * 256).dp).fillMaxWidth()) }
             }
             VerticalScrollbar(state, Modifier.align(Alignment.CenterEnd))
         }

@@ -1,5 +1,6 @@
 package dev.stashy.standard.samples.gallery.screens.scrollshadow
 
+import androidx.compose.foundation.layout.ExperimentalGridApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import dev.stashy.standard.samples.gallery.GalleryScreen
@@ -17,6 +18,7 @@ internal class ScrollShadowScreen : GalleryScreen {
 
     @Composable
     override fun Content() {
+        @OptIn(ExperimentalGridApi::class)
         SampleContent {
             ScrollStateScrollShadowSection()
             LazyListScrollShadowSection()

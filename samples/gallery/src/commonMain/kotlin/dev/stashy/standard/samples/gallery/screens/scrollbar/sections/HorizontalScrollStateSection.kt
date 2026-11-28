@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.stashy.standard.samples.gallery.components.SampleItem
 import dev.stashy.standard.samples.gallery.components.Section
 import dev.stashy.standard.samples.gallery.theme.GalleryTheme
 import dev.stashy.standard.ui.components.scroll.HorizontalScrollbar
@@ -21,7 +22,7 @@ internal fun HorizontalScrollStateSection() {
             Row(
                 Modifier.fillMaxSize().padding(bottom = 12.dp).horizontalScroll(state),
             ) {
-                repeat(1000) { index -> SampleCell(index) }
+                repeat(1000) { index -> SampleItem(index, Modifier.width(64.dp).fillMaxHeight()) }
             }
             HorizontalScrollbar(state, Modifier.align(Alignment.BottomCenter))
         }

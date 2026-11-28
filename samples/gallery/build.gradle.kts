@@ -32,6 +32,7 @@ kotlin {
         commonMain.dependencies {
             implementation(projects.modules.navigation)
             implementation(projects.modules.uiComponents)
+            implementation(projects.modules.uiResponsive)
 
             implementation(composeLibs.jb.runtime)
             implementation(composeLibs.jb.foundation)

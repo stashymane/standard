@@ -22,7 +22,7 @@ internal fun VerticalScrollStateSection() {
             Column(
                 Modifier.fillMaxSize().padding(end = 12.dp).verticalScroll(state),
             ) {
-                repeat(1000) { index -> SampleItem(index) }
+                repeat(1000) { index -> SampleItem(index, Modifier.height(64.dp).fillMaxWidth()) }
             }
             VerticalScrollbar(state, Modifier.align(Alignment.CenterEnd))
         }

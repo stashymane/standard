@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.stashy.standard.samples.gallery.components.SampleItem
 import dev.stashy.standard.samples.gallery.components.Section
 import dev.stashy.standard.samples.gallery.theme.GalleryTheme
 import dev.stashy.standard.ui.components.scroll.HorizontalScrollbar
@@ -17,12 +18,12 @@ internal fun HorizontalLazyListSection() {
     Section("Horizontal · LazyListState") {
         val state = rememberLazyListState()
 
-        Box(Modifier.heightIn(max = 100.dp).align(Alignment.CenterHorizontally)) {
+        Box(Modifier.height(100.dp).align(Alignment.CenterHorizontally)) {
             LazyRow(
                 Modifier.fillMaxSize().padding(bottom = 12.dp),
                 state = state,
             ) {
-                items(1_000) { index -> SampleCell(index) }
+                items(1_000) { index -> SampleItem(index, Modifier.width(64.dp).fillMaxHeight()) }
             }
             HorizontalScrollbar(state, Modifier.align(Alignment.BottomCenter))
         }

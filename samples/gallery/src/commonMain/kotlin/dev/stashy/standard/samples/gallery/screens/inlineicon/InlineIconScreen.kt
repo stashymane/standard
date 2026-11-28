@@ -1,5 +1,6 @@
 package dev.stashy.standard.samples.gallery.screens.inlineicon
 
+import androidx.compose.foundation.layout.ExperimentalGridApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
@@ -17,6 +18,7 @@ internal class InlineIconScreen : GalleryScreen {
 
     @Composable
     override fun Content() {
+        @OptIn(ExperimentalGridApi::class)
         SampleContent {
             val styles = listOf(
                 MaterialTheme.typography.bodySmall,

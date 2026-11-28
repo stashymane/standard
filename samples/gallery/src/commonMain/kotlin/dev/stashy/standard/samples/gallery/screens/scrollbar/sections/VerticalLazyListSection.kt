@@ -18,12 +18,12 @@ internal fun VerticalLazyListSection() {
     Section("Vertical · LazyListState") {
         val state = rememberLazyListState()
 
-        Box(Modifier.heightIn(max = 260.dp).align(Alignment.CenterHorizontally)) {
+        Box(Modifier.height(260.dp).align(Alignment.CenterHorizontally)) {
             LazyColumn(
                 Modifier.fillMaxSize().padding(end = 12.dp),
                 state = state,
             ) {
-                items(10_000) { index -> SampleItem(index) }
+                items(10_000) { index -> SampleItem(index, Modifier.height(64.dp).fillMaxWidth()) }
             }
             VerticalScrollbar(state, Modifier.align(Alignment.CenterEnd))
         }

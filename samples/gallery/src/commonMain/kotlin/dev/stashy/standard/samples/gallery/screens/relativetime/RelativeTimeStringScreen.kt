@@ -1,5 +1,6 @@
 package dev.stashy.standard.samples.gallery.screens.relativetime
 
+import androidx.compose.foundation.layout.ExperimentalGridApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import dev.stashy.standard.samples.gallery.GalleryScreen
@@ -23,6 +24,7 @@ internal class RelativeTimeStringScreen : GalleryScreen {
     override fun Content() {
         val now = Clock.System.now()
 
+        @OptIn(ExperimentalGridApi::class)
         SampleContent {
             RelativeTimeSection(
                 title = "Past",
